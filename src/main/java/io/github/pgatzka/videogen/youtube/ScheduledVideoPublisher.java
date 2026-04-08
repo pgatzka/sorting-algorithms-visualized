@@ -4,7 +4,6 @@ import io.github.pgatzka.ApplicationProperties;
 import io.github.pgatzka.videogen.algorithm.AlgorithmRegistry;
 import io.github.pgatzka.videogen.job.*;
 import io.github.pgatzka.videogen.visualization.VisualizationRegistry;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
@@ -67,12 +66,13 @@ public class ScheduledVideoPublisher {
 
       VideoJobEntity completed = jobService.getJob(job.getId()).orElseThrow();
       if (completed.getStatus() == VideoJobStatus.COMPLETED) {
-        log.info("Scheduled job completed: id={}, youtube={}", job.getId(), completed.getYoutubeVideoId());
+        log.info(
+            "Scheduled job completed: id={}, youtube={}",
+            job.getId(),
+            completed.getYoutubeVideoId());
       } else {
         log.error(
-            "Scheduled job failed: id={}, error={}",
-            job.getId(),
-            completed.getErrorMessage());
+            "Scheduled job failed: id={}, error={}", job.getId(), completed.getErrorMessage());
       }
 
     } catch (Exception e) {

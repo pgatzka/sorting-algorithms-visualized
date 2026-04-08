@@ -44,8 +44,7 @@ public class VideoCleanupScheduler {
       return;
     }
 
-    log.info(
-        "Cleaning up {} videos older than {} days", oldJobs.size(), retentionDays);
+    log.info("Cleaning up {} videos older than {} days", oldJobs.size(), retentionDays);
 
     int deleted = 0;
     for (VideoJobEntity job : oldJobs) {

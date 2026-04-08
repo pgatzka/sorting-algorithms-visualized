@@ -9,8 +9,6 @@ import io.github.pgatzka.videogen.encoding.FfmpegEncoder;
 import io.github.pgatzka.videogen.encoding.FfmpegEncoderFactory;
 import io.github.pgatzka.videogen.visualization.ColorScheme;
 import io.github.pgatzka.videogen.visualization.FramePostProcessor;
-import io.github.pgatzka.videogen.youtube.CaptionGenerator;
-import io.github.pgatzka.videogen.youtube.YouTubeUploadService;
 import io.github.pgatzka.videogen.visualization.GlowEffect;
 import io.github.pgatzka.videogen.visualization.ParticleTrailEffect;
 import io.github.pgatzka.videogen.visualization.PollIntroRenderer;
@@ -20,6 +18,8 @@ import io.github.pgatzka.videogen.visualization.TitleOverlay;
 import io.github.pgatzka.videogen.visualization.TweeningRenderer;
 import io.github.pgatzka.videogen.visualization.Visualization;
 import io.github.pgatzka.videogen.visualization.VisualizationRegistry;
+import io.github.pgatzka.videogen.youtube.CaptionGenerator;
+import io.github.pgatzka.videogen.youtube.YouTubeUploadService;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -1038,8 +1038,7 @@ public class VideoJobService {
         for (int i = 0; i < 120; i++) {
           Thread.sleep(5000);
           try {
-            YouTubeUploadService.VideoMetrics metrics =
-                youTubeUploadService.fetchMetrics(videoId);
+            YouTubeUploadService.VideoMetrics metrics = youTubeUploadService.fetchMetrics(videoId);
             jobUpdater.updateYouTubeStatus(jobId, videoId, "PUBLIC");
             jobUpdater.updateStatusMessage(jobId, "Live on YouTube: " + videoId);
             log.info("Job {}: Video is public on YouTube: {}", jobId, videoId);

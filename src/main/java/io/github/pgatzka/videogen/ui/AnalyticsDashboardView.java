@@ -61,7 +61,8 @@ public class AnalyticsDashboardView extends VerticalLayout {
           new Thread(
                   () -> {
                     metricsRefreshScheduler.refreshMetrics();
-                    refreshMetricsBtn.getUI()
+                    refreshMetricsBtn
+                        .getUI()
                         .ifPresent(
                             ui ->
                                 ui.access(

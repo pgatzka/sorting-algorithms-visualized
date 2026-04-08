@@ -33,8 +33,6 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -267,9 +265,7 @@ public class VideoGeneratorView extends VerticalLayout {
 
           Notification.show(
               String.format(
-                  getTranslation("form.batch-started"),
-                  count,
-                  upload ? " + upload" : ""));
+                  getTranslation("form.batch-started"), count, upload ? " + upload" : ""));
           refreshGrid();
         });
 
@@ -358,8 +354,7 @@ public class VideoGeneratorView extends VerticalLayout {
                 actions.add(download);
 
                 // Upload to YouTube button
-                if (youTubeUploadService.isEnabled()
-                    && entity.getYoutubeVideoId() == null) {
+                if (youTubeUploadService.isEnabled() && entity.getYoutubeVideoId() == null) {
                   Button uploadBtn = new Button(getTranslation("grid.action.upload-youtube"));
                   uploadBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
                   uploadBtn.addClickListener(
@@ -403,9 +398,7 @@ public class VideoGeneratorView extends VerticalLayout {
                             "click",
                             e ->
                                 Notification.show(
-                                    entity.getYoutubeStatus(),
-                                    5000,
-                                    Notification.Position.MIDDLE));
+                                    entity.getYoutubeStatus(), 5000, Notification.Position.MIDDLE));
                   }
                   actions.add(ytBadge);
                 }
