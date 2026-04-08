@@ -15,6 +15,31 @@ public class VideoJobUpdater {
   private final VideoJobRepository repository;
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void updateStatusMessage(UUID jobId, String message) {
+    repository
+        .findById(jobId)
+        .ifPresent(
+            job -> {
+              job.setStatusMessage(message);
+              repository.save(job);
+              log.info("Job {}: {}", jobId, message);
+            });
+  }
+
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void updateProgress(UUID jobId, int progress, String message) {
+    repository
+        .findById(jobId)
+        .ifPresent(
+            job -> {
+              job.setProgress(progress);
+              job.setStatusMessage(message);
+              repository.save(job);
+              log.info("Job {}: {}% - {}", jobId, progress, message);
+            });
+  }
+
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void updateProgress(UUID jobId, int progress) {
     repository
         .findById(jobId)
@@ -46,6 +71,7 @@ public class VideoJobUpdater {
             job -> {
               log.info("Job {}: Status change {} -> RUNNING", jobId, job.getStatus());
               job.setStatus(VideoJobStatus.RUNNING);
+              job.setStatusMessage("Initializing...");
               job.setStartedAt(startedAt);
               repository.save(job);
             });
@@ -59,6 +85,7 @@ public class VideoJobUpdater {
             job -> {
               log.info("Job {}: Status change {} -> COMPLETED", jobId, job.getStatus());
               job.setProgress(100);
+              job.setStatusMessage("Done");
               job.setOutputPath(outputPath);
               job.setCompletedAt(completedAt);
               job.setStatus(VideoJobStatus.COMPLETED);
@@ -73,6 +100,7 @@ public class VideoJobUpdater {
         .ifPresent(
             job -> {
               log.info("Job {}: Status change {} -> FAILED", jobId, job.getStatus());
+              job.setStatusMessage("Failed: " + errorMessage);
               job.setErrorMessage(errorMessage);
               job.setCompletedAt(completedAt);
               job.setStatus(VideoJobStatus.FAILED);

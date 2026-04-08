@@ -9,6 +9,8 @@ import io.github.pgatzka.videogen.encoding.FfmpegEncoder;
 import io.github.pgatzka.videogen.encoding.FfmpegEncoderFactory;
 import io.github.pgatzka.videogen.visualization.ColorScheme;
 import io.github.pgatzka.videogen.visualization.FramePostProcessor;
+import io.github.pgatzka.videogen.visualization.GlowEffect;
+import io.github.pgatzka.videogen.visualization.ParticleTrailEffect;
 import io.github.pgatzka.videogen.visualization.PollIntroRenderer;
 import io.github.pgatzka.videogen.visualization.SideBySideRenderer;
 import io.github.pgatzka.videogen.visualization.StatsOverlay;
@@ -142,25 +144,39 @@ public class VideoJobService {
       ColorScheme colorScheme = ColorScheme.valueOf(job.getColorScheme());
       int paddingFrames = job.getFps(); // 1 second of padding
 
-      log.info(
-          "Job {}: Generating states with {} (elements={}, shuffle={})",
+      jobUpdater.updateStatusMessage(
           jobId,
-          algorithm.getName(),
-          job.getElementCount(),
-          job.isShuffle());
+          String.format(
+              "Generating %s states for %d elements...",
+              algorithm.getName(), job.getElementCount()));
 
       List<SortingState> shuffleStates;
       List<SortingState> sortStates;
 
       if (job.isShuffle()) {
+        jobUpdater.updateStatusMessage(jobId, "Generating shuffle states...");
         shuffleStates = generateShuffleStates(job.getElementCount());
         int[] shuffledArray = shuffleStates.getLast().array();
+        jobUpdater.updateStatusMessage(
+            jobId,
+            String.format(
+                "Running %s on %d elements...", algorithm.getName(), job.getElementCount()));
         sortStates = algorithm.sort(shuffledArray);
       } else {
         shuffleStates = List.of();
         int[] shuffledArray = generateRandomArray(job.getElementCount());
+        jobUpdater.updateStatusMessage(
+            jobId,
+            String.format(
+                "Running %s on %d elements...", algorithm.getName(), job.getElementCount()));
         sortStates = algorithm.sort(shuffledArray);
       }
+
+      jobUpdater.updateStatusMessage(
+          jobId,
+          String.format(
+              "Generated %d sort states + %d shuffle states",
+              sortStates.size(), shuffleStates.size()));
 
       // Victory sweep: highlight each element left to right
       List<SortingState> sweepStates = new ArrayList<>();
@@ -213,6 +229,9 @@ public class VideoJobService {
       TweeningRenderer tweener = job.isTweening() ? new TweeningRenderer() : null;
       int[] counters = new int[2];
 
+      jobUpdater.updateStatusMessage(
+          jobId, String.format("Starting video encoding (%d total frames)...", totalFrames));
+
       try (FfmpegEncoder encoder = encoderFactory.create()) {
         encoder.start(
             videoPath, job.getWidth(), job.getHeight(), effectiveFps, properties.getFfmpegPath());
@@ -236,6 +255,7 @@ public class VideoJobService {
         }
 
         if (job.isShuffle()) {
+          jobUpdater.updateStatusMessage(jobId, "Encoding sorted array...");
           Set<Integer> allSorted =
               IntStream.range(0, job.getElementCount())
                   .boxed()
@@ -260,6 +280,9 @@ public class VideoJobService {
                   counters,
                   effectiveFps);
 
+          jobUpdater.updateStatusMessage(
+              jobId,
+              String.format("Encoding shuffle animation (%d states)...", shuffleStates.size()));
           framesWritten =
               writeStates(
                   encoder,
@@ -274,7 +297,8 @@ public class VideoJobService {
                   counters,
                   false,
                   effectiveFramesPerStep,
-                  effectiveFps);
+                  effectiveFps,
+                  "Shuffling");
 
           framesWritten =
               writePadding(
@@ -307,6 +331,11 @@ public class VideoJobService {
           statsOverlay.startCounting(framesWritten);
         }
 
+        jobUpdater.updateStatusMessage(
+            jobId,
+            String.format(
+                "Encoding %s sort animation (%d states)...",
+                job.getAlgorithm(), sortStates.size()));
         framesWritten =
             writeStates(
                 encoder,
@@ -321,7 +350,8 @@ public class VideoJobService {
                 counters,
                 true,
                 effectiveFramesPerStep,
-                effectiveFps);
+                effectiveFps,
+                "Sorting");
 
         if (statsOverlay != null) {
           statsOverlay.freeze(framesWritten);
@@ -341,7 +371,8 @@ public class VideoJobService {
                 counters,
                 false,
                 effectiveFramesPerStep,
-                effectiveFps);
+                effectiveFps,
+                "Victory sweep");
 
         framesWritten =
             writePadding(
@@ -361,6 +392,7 @@ public class VideoJobService {
       }
 
       if (job.isSound()) {
+        jobUpdater.updateStatusMessage(jobId, "Generating audio track...");
         Path audioPath = outputPath.resolveSibling("tmp_" + filename.replace(".mp4", ".wav"));
         try {
           List<AudioGenerator.AudioPhase> audioPhases = new ArrayList<>();
@@ -381,6 +413,7 @@ public class VideoJobService {
                   job.getElementCount(),
                   paddingFrames);
 
+          jobUpdater.updateStatusMessage(jobId, "Muxing audio and video...");
           muxAudioVideo(videoPath, audioPath, outputPath, properties.getFfmpegPath());
         } finally {
           Files.deleteIfExists(videoPath);
@@ -407,16 +440,62 @@ public class VideoJobService {
     int effectiveFramesPerStep = job.isSpeedRun() ? 1 : job.getFramesPerStep();
     int paddingFrames = effectiveFps;
 
-    int[] inputArray = generateRandomArray(job.getElementCount());
-    List<SortingState> states1 = algo1.sort(inputArray.clone());
-    List<SortingState> states2 = algo2.sort(inputArray.clone());
+    // Generate states
+    List<SortingState> shuffleStates1 = List.of();
+    List<SortingState> shuffleStates2 = List.of();
+    List<SortingState> sortStates1;
+    List<SortingState> sortStates2;
 
-    // Pad shorter list to match longer
-    int maxLen = Math.max(states1.size(), states2.size());
-    while (states1.size() < maxLen) states1.add(states1.getLast());
-    while (states2.size() < maxLen) states2.add(states2.getLast());
+    if (job.isShuffle()) {
+      jobUpdater.updateStatusMessage(jobId, "Generating shuffle states...");
+      shuffleStates1 = generateShuffleStates(job.getElementCount());
+      // Both algorithms use the same shuffled array
+      int[] shuffledArray = shuffleStates1.getLast().array();
+      shuffleStates2 = new ArrayList<>(shuffleStates1); // same shuffle
 
-    int totalFrames = maxLen * effectiveFramesPerStep + paddingFrames * 2;
+      jobUpdater.updateStatusMessage(
+          jobId,
+          String.format(
+              "Running %s and %s on %d elements...",
+              algo1.getName(), algo2.getName(), job.getElementCount()));
+      sortStates1 = algo1.sort(shuffledArray.clone());
+      sortStates2 = algo2.sort(shuffledArray.clone());
+    } else {
+      int[] inputArray = generateRandomArray(job.getElementCount());
+      jobUpdater.updateStatusMessage(
+          jobId,
+          String.format(
+              "Running %s and %s on %d elements...",
+              algo1.getName(), algo2.getName(), job.getElementCount()));
+      sortStates1 = algo1.sort(inputArray.clone());
+      sortStates2 = algo2.sort(inputArray.clone());
+    }
+
+    // Pad sort states to match length
+    int maxSortLen = Math.max(sortStates1.size(), sortStates2.size());
+    sortStates1 = new ArrayList<>(sortStates1);
+    sortStates2 = new ArrayList<>(sortStates2);
+    while (sortStates1.size() < maxSortLen) sortStates1.add(sortStates1.getLast());
+    while (sortStates2.size() < maxSortLen) sortStates2.add(sortStates2.getLast());
+
+    // Victory sweep
+    List<SortingState> sweepStates = new ArrayList<>();
+    int[] sortedArray = sortStates1.getLast().array();
+    for (int i = 0; i < job.getElementCount(); i++) {
+      sweepStates.add(new SortingState(sortedArray, i, -1, false, Set.of()));
+    }
+
+    int shuffleLen = job.isShuffle() ? shuffleStates1.size() : 0;
+    int introFrames = effectiveFps * 2;
+    int totalPaddingFrames = job.isShuffle() ? 3 * paddingFrames : 2 * paddingFrames;
+    int totalFrames =
+        introFrames
+            + (shuffleLen + maxSortLen + sweepStates.size()) * effectiveFramesPerStep
+            + totalPaddingFrames;
+
+    jobUpdater.updateStatusMessage(
+        jobId,
+        String.format("Generated %d vs %d sort states", sortStates1.size(), sortStates2.size()));
 
     Path outputDir = Path.of(properties.getOutputDir());
     Files.createDirectories(outputDir);
@@ -427,14 +506,30 @@ public class VideoJobService {
     SideBySideRenderer sideBySide = new SideBySideRenderer();
     TitleOverlay leftTitle = new TitleOverlay(job.getAlgorithm());
     TitleOverlay rightTitle = new TitleOverlay(job.getSecondAlgorithm());
+    GlowEffect glowLeft = job.isGlowEffect() ? new GlowEffect() : null;
+    GlowEffect glowRight = job.isGlowEffect() ? new GlowEffect() : null;
+    ParticleTrailEffect particlesLeft = job.isParticleTrail() ? new ParticleTrailEffect() : null;
+    ParticleTrailEffect particlesRight = job.isParticleTrail() ? new ParticleTrailEffect() : null;
+
+    List<String> debugLines =
+        job.isDebug() ? buildDebugLines(job, effectiveFps, effectiveFramesPerStep) : null;
+    StatsOverlay statsOverlay =
+        job.isShowStats()
+            ? new StatsOverlay(job.getElementCount(), new Random().nextInt(10), debugLines)
+            : null;
+
+    jobUpdater.updateStatusMessage(
+        jobId, String.format("Starting video encoding (%d total frames)...", totalFrames));
 
     try (FfmpegEncoder encoder = encoderFactory.create()) {
       encoder.start(
           videoPath, job.getWidth(), job.getHeight(), effectiveFps, properties.getFfmpegPath());
 
       int framesWritten = 0;
+      int halfWidth = job.getWidth() / 2;
 
       // Poll intro (2s)
+      jobUpdater.updateStatusMessage(jobId, "Encoding intro...");
       BufferedImage introFrame =
           new PollIntroRenderer()
               .renderVersus(
@@ -443,68 +538,244 @@ public class VideoJobService {
                   job.getElementCount(),
                   job.getWidth(),
                   job.getHeight());
-      for (int f = 0; f < effectiveFps * 2; f++) {
+      for (int f = 0; f < introFrames; f++) {
         encoder.writeFrame(introFrame);
         framesWritten++;
       }
 
-      // 1s padding
-      BufferedImage firstFrame =
-          sideBySide.render(
-              visualization,
-              states1.getFirst(),
-              states2.getFirst(),
-              job.getWidth(),
-              job.getHeight(),
-              colorScheme);
-      for (int f = 0; f < paddingFrames; f++) {
-        encoder.writeFrame(firstFrame);
-        framesWritten++;
-      }
+      if (job.isShuffle()) {
+        // 1s padding with sorted array
+        jobUpdater.updateStatusMessage(jobId, "Encoding sorted array...");
+        Set<Integer> allSorted =
+            IntStream.range(0, job.getElementCount())
+                .boxed()
+                .collect(java.util.stream.Collectors.toSet());
+        SortingState sortedState =
+            new SortingState(
+                IntStream.rangeClosed(1, job.getElementCount()).toArray(),
+                -1,
+                -1,
+                false,
+                allSorted);
+        for (int f = 0; f < paddingFrames; f++) {
+          BufferedImage frame =
+              sideBySide.render(
+                  visualization,
+                  sortedState,
+                  sortedState,
+                  job.getWidth(),
+                  job.getHeight(),
+                  colorScheme);
+          applyVsOverlays(
+              frame,
+              sortedState,
+              sortedState,
+              halfWidth,
+              job,
+              leftTitle,
+              rightTitle,
+              glowLeft,
+              glowRight,
+              particlesLeft,
+              particlesRight,
+              statsOverlay,
+              framesWritten,
+              effectiveFps,
+              new int[2]);
+          encoder.writeFrame(frame);
+          framesWritten++;
+        }
 
-      // Sort animation
-      for (int i = 0; i < maxLen; i++) {
-        BufferedImage frame =
-            sideBySide.render(
+        // Shuffle animation
+        jobUpdater.updateStatusMessage(jobId, "Encoding shuffle...");
+        framesWritten =
+            writeVsStates(
+                encoder,
                 visualization,
-                states1.get(i),
-                states2.get(i),
-                job.getWidth(),
-                job.getHeight(),
-                colorScheme);
+                colorScheme,
+                sideBySide,
+                shuffleStates1,
+                shuffleStates2,
+                job,
+                halfWidth,
+                leftTitle,
+                rightTitle,
+                glowLeft,
+                glowRight,
+                particlesLeft,
+                particlesRight,
+                statsOverlay,
+                framesWritten,
+                totalFrames,
+                new int[2],
+                effectiveFramesPerStep,
+                effectiveFps,
+                "Shuffling");
 
-        // Overlay algorithm names on each half
-        var g = frame.createGraphics();
-        g.dispose();
-
-        for (int f = 0; f < effectiveFramesPerStep; f++) {
+        // 1s padding after shuffle
+        SortingState lastShuffle = shuffleStates1.getLast();
+        for (int f = 0; f < paddingFrames; f++) {
+          BufferedImage frame =
+              sideBySide.render(
+                  visualization,
+                  lastShuffle,
+                  lastShuffle,
+                  job.getWidth(),
+                  job.getHeight(),
+                  colorScheme);
+          applyVsOverlays(
+              frame,
+              lastShuffle,
+              lastShuffle,
+              halfWidth,
+              job,
+              leftTitle,
+              rightTitle,
+              glowLeft,
+              glowRight,
+              particlesLeft,
+              particlesRight,
+              statsOverlay,
+              framesWritten,
+              effectiveFps,
+              new int[2]);
+          encoder.writeFrame(frame);
+          framesWritten++;
+        }
+      } else {
+        // 1s padding before sort
+        SortingState first1 = sortStates1.getFirst();
+        SortingState first2 = sortStates2.getFirst();
+        for (int f = 0; f < paddingFrames; f++) {
+          BufferedImage frame =
+              sideBySide.render(
+                  visualization, first1, first2, job.getWidth(), job.getHeight(), colorScheme);
+          applyVsOverlays(
+              frame,
+              first1,
+              first2,
+              halfWidth,
+              job,
+              leftTitle,
+              rightTitle,
+              glowLeft,
+              glowRight,
+              particlesLeft,
+              particlesRight,
+              statsOverlay,
+              framesWritten,
+              effectiveFps,
+              new int[2]);
           encoder.writeFrame(frame);
           framesWritten++;
         }
       }
 
-      // 1s padding
-      BufferedImage lastFrame =
-          sideBySide.render(
+      // Start stats counting
+      if (statsOverlay != null) {
+        statsOverlay.startCounting(framesWritten);
+      }
+      int[] counters = new int[2];
+
+      // Sort animation
+      framesWritten =
+          writeVsStates(
+              encoder,
               visualization,
-              states1.getLast(),
-              states2.getLast(),
-              job.getWidth(),
-              job.getHeight(),
-              colorScheme);
+              colorScheme,
+              sideBySide,
+              sortStates1,
+              sortStates2,
+              job,
+              halfWidth,
+              leftTitle,
+              rightTitle,
+              glowLeft,
+              glowRight,
+              particlesLeft,
+              particlesRight,
+              statsOverlay,
+              framesWritten,
+              totalFrames,
+              counters,
+              effectiveFramesPerStep,
+              effectiveFps,
+              "Sorting");
+
+      // Freeze stats
+      if (statsOverlay != null) {
+        statsOverlay.freeze(framesWritten);
+      }
+
+      // Victory sweep
+      framesWritten =
+          writeVsStates(
+              encoder,
+              visualization,
+              colorScheme,
+              sideBySide,
+              sweepStates,
+              sweepStates,
+              job,
+              halfWidth,
+              leftTitle,
+              rightTitle,
+              glowLeft,
+              glowRight,
+              particlesLeft,
+              particlesRight,
+              statsOverlay,
+              framesWritten,
+              totalFrames,
+              counters,
+              effectiveFramesPerStep,
+              effectiveFps,
+              "Victory sweep");
+
+      // 1s padding after sort
+      SortingState last1 = sortStates1.getLast();
+      SortingState last2 = sortStates2.getLast();
       for (int f = 0; f < paddingFrames; f++) {
-        encoder.writeFrame(lastFrame);
+        BufferedImage frame =
+            sideBySide.render(
+                visualization, last1, last2, job.getWidth(), job.getHeight(), colorScheme);
+        applyVsOverlays(
+            frame,
+            last1,
+            last2,
+            halfWidth,
+            job,
+            leftTitle,
+            rightTitle,
+            glowLeft,
+            glowRight,
+            particlesLeft,
+            particlesRight,
+            statsOverlay,
+            framesWritten,
+            effectiveFps,
+            counters);
+        encoder.writeFrame(frame);
         framesWritten++;
       }
 
-      jobUpdater.updateProgress(jobId, 100);
+      jobUpdater.updateProgress(jobId, 100, "Video encoding complete");
     }
 
     if (job.isSound()) {
+      jobUpdater.updateStatusMessage(jobId, "Generating audio track...");
       Path audioPath = outputPath.resolveSibling("tmp_" + filename.replace(".mp4", ".wav"));
       try {
         List<AudioGenerator.AudioPhase> audioPhases = new ArrayList<>();
-        audioPhases.add(new AudioGenerator.AudioPhase(effectiveFps * 2 + paddingFrames, states1));
+        if (job.isShuffle()) {
+          audioPhases.add(
+              new AudioGenerator.AudioPhase(introFrames + paddingFrames, shuffleStates1));
+          audioPhases.add(new AudioGenerator.AudioPhase(paddingFrames, sortStates1));
+        } else {
+          audioPhases.add(new AudioGenerator.AudioPhase(introFrames + paddingFrames, sortStates1));
+        }
+        audioPhases.add(new AudioGenerator.AudioPhase(0, sweepStates));
+
         new AudioGenerator()
             .generate(
                 audioPath,
@@ -513,6 +784,8 @@ public class VideoJobService {
                 effectiveFps,
                 job.getElementCount(),
                 paddingFrames);
+
+        jobUpdater.updateStatusMessage(jobId, "Muxing audio and video...");
         muxAudioVideo(videoPath, audioPath, outputPath, properties.getFfmpegPath());
       } finally {
         Files.deleteIfExists(videoPath);
@@ -522,6 +795,127 @@ public class VideoJobService {
 
     jobUpdater.markCompleted(jobId, outputPath.toAbsolutePath().toString(), Instant.now());
     log.info("Job {}: Side-by-side completed. Output: {}", jobId, outputPath);
+  }
+
+  private int writeVsStates(
+      FfmpegEncoder encoder,
+      Visualization visualization,
+      ColorScheme colorScheme,
+      SideBySideRenderer sideBySide,
+      List<SortingState> states1,
+      List<SortingState> states2,
+      VideoJobEntity job,
+      int halfWidth,
+      TitleOverlay leftTitle,
+      TitleOverlay rightTitle,
+      GlowEffect glowLeft,
+      GlowEffect glowRight,
+      ParticleTrailEffect particlesLeft,
+      ParticleTrailEffect particlesRight,
+      StatsOverlay statsOverlay,
+      int framesWritten,
+      int totalFrames,
+      int[] counters,
+      int framesPerStep,
+      int fps,
+      String phaseName)
+      throws Exception {
+    int stateCount = states1.size();
+    int lastReportedPhasePercent = -1;
+
+    for (int i = 0; i < stateCount; i++) {
+      SortingState s1 = states1.get(i);
+      SortingState s2 = states2.get(i);
+
+      BufferedImage frame =
+          sideBySide.render(visualization, s1, s2, job.getWidth(), job.getHeight(), colorScheme);
+
+      applyVsOverlays(
+          frame,
+          s1,
+          s2,
+          halfWidth,
+          job,
+          leftTitle,
+          rightTitle,
+          glowLeft,
+          glowRight,
+          particlesLeft,
+          particlesRight,
+          statsOverlay,
+          framesWritten,
+          fps,
+          counters);
+
+      for (int f = 0; f < framesPerStep; f++) {
+        encoder.writeFrame(frame);
+        framesWritten++;
+      }
+
+      int phasePercent = (int) ((i + 1) * 100L / stateCount);
+      if (phasePercent >= lastReportedPhasePercent + 5) {
+        lastReportedPhasePercent = phasePercent;
+        int overallPercent = (int) ((framesWritten * 100L) / totalFrames);
+        jobUpdater.updateProgress(
+            job.getId(),
+            overallPercent,
+            String.format("%s %d%% (%d/%d states)", phaseName, phasePercent, i + 1, stateCount));
+      }
+    }
+    return framesWritten;
+  }
+
+  private void applyVsOverlays(
+      BufferedImage frame,
+      SortingState leftState,
+      SortingState rightState,
+      int halfWidth,
+      VideoJobEntity job,
+      TitleOverlay leftTitle,
+      TitleOverlay rightTitle,
+      GlowEffect glowLeft,
+      GlowEffect glowRight,
+      ParticleTrailEffect particlesLeft,
+      ParticleTrailEffect particlesRight,
+      StatsOverlay statsOverlay,
+      int framesWritten,
+      int fps,
+      int[] counters) {
+    // Apply glow to each half via sub-images
+    if (glowLeft != null) {
+      BufferedImage leftHalf = frame.getSubimage(0, 0, halfWidth, frame.getHeight());
+      glowLeft.apply(leftHalf, leftState, job.getElementCount());
+    }
+    if (glowRight != null) {
+      BufferedImage rightHalf =
+          frame.getSubimage(halfWidth, 0, frame.getWidth() - halfWidth, frame.getHeight());
+      glowRight.apply(rightHalf, rightState, job.getElementCount());
+    }
+
+    // Particles on each half
+    if (particlesLeft != null) {
+      BufferedImage leftHalf = frame.getSubimage(0, 0, halfWidth, frame.getHeight());
+      particlesLeft.update(leftState, leftHalf);
+      particlesLeft.render(leftHalf);
+    }
+    if (particlesRight != null) {
+      BufferedImage rightHalf =
+          frame.getSubimage(halfWidth, 0, frame.getWidth() - halfWidth, frame.getHeight());
+      particlesRight.update(rightState, rightHalf);
+      particlesRight.render(rightHalf);
+    }
+
+    // Title on each half
+    BufferedImage leftHalf = frame.getSubimage(0, 0, halfWidth, frame.getHeight());
+    leftTitle.render(leftHalf);
+    BufferedImage rightHalf =
+        frame.getSubimage(halfWidth, 0, frame.getWidth() - halfWidth, frame.getHeight());
+    rightTitle.render(rightHalf);
+
+    // Stats overlay on full frame
+    if (statsOverlay != null) {
+      statsOverlay.render(frame, framesWritten, fps, counters[0], counters[1]);
+    }
   }
 
   private int writeStates(
@@ -537,10 +931,15 @@ public class VideoJobService {
       int[] counters,
       boolean countStats,
       int framesPerStep,
-      int fps)
+      int fps,
+      String phaseName)
       throws Exception {
     SortingState previousState = null;
-    for (SortingState state : states) {
+    int stateCount = states.size();
+    int lastReportedPhasePercent = -1;
+
+    for (int stateIdx = 0; stateIdx < stateCount; stateIdx++) {
+      SortingState state = states.get(stateIdx);
       if (countStats && state.compareIdx1() >= 0 && state.compareIdx2() >= 0) {
         counters[0] += 2;
         counters[1]++;
@@ -575,9 +974,19 @@ public class VideoJobService {
         }
       }
       previousState = state;
+
+      // Report per-phase progress every ~5%
+      int phasePercent = (int) ((stateIdx + 1) * 100L / stateCount);
+      if (phasePercent >= lastReportedPhasePercent + 5) {
+        lastReportedPhasePercent = phasePercent;
+        int overallPercent = (int) ((framesWritten * 100L) / totalFrames);
+        jobUpdater.updateProgress(
+            job.getId(),
+            overallPercent,
+            String.format(
+                "%s %d%% (%d/%d states)", phaseName, phasePercent, stateIdx + 1, stateCount));
+      }
     }
-    int percent = (int) ((framesWritten * 100L) / totalFrames);
-    jobUpdater.updateProgress(job.getId(), percent);
     return framesWritten;
   }
 

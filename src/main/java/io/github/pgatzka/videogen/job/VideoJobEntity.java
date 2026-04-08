@@ -77,6 +77,9 @@ public class VideoJobEntity {
   @Column(name = "output_path", length = 500)
   private String outputPath;
 
+  @Column(name = "status_message", length = 500)
+  private String statusMessage;
+
   @Column(name = "error_message", columnDefinition = "TEXT")
   private String errorMessage;
 

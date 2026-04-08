@@ -212,9 +212,19 @@ public class VideoGeneratorView extends VerticalLayout {
               progressBar.setMin(0);
               progressBar.setMax(100);
               progressBar.setValue(entity.getProgress());
-              return progressBar;
+              Span percentLabel = new Span(entity.getProgress() + "%");
+              percentLabel.getStyle().set("font-size", "var(--lumo-font-size-s)");
+              HorizontalLayout layout = new HorizontalLayout(progressBar, percentLabel);
+              layout.setAlignItems(Alignment.CENTER);
+              layout.setFlexGrow(1, progressBar);
+              layout.setWidthFull();
+              return layout;
             })
         .setHeader(getTranslation("grid.column.progress"));
+
+    jobGrid
+        .addColumn(entity -> entity.getStatusMessage() != null ? entity.getStatusMessage() : "")
+        .setHeader(getTranslation("grid.column.current-step"));
 
     jobGrid
         .addComponentColumn(

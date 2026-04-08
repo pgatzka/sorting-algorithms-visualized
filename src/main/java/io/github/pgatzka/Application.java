@@ -12,6 +12,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 @EnableConfigurationProperties(ApplicationProperties.class)
 @ColorScheme(ColorScheme.Value.DARK)
 @StyleSheet(Lumo.STYLESHEET)
+@StyleSheet(Lumo.COMPACT_STYLESHEET)
 @StyleSheet(Lumo.UTILITY_STYLESHEET)
 public class Application implements AppShellConfigurator {
 
