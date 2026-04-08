@@ -1,11 +1,11 @@
-package io.github.pgatzka.videogen.config;
+package io.github.pgatzka;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @Data
 @ConfigurationProperties(prefix = "videogen")
-public class VideoGenProperties {
+public class ApplicationProperties {
 
   private String outputDir = "./videos";
   private String ffmpegPath = "ffmpeg";
@@ -14,4 +14,5 @@ public class VideoGenProperties {
   private int defaultFps = 60;
   private int defaultElementCount = 50;
   private int defaultFramesPerStep = 3;
+  private boolean defaultShuffle = true;
 }

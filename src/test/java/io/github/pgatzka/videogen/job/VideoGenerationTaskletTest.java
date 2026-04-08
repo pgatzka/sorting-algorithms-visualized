@@ -25,7 +25,7 @@ class VideoGenerationTaskletTest {
     FfmpegEncoder mockEncoder = mock(FfmpegEncoder.class);
     when(encoderFactory.create()).thenReturn(mockEncoder);
 
-    VideoJobEntity job = service.submitJob("BubbleSort", "BarChart", 5, 30, 320, 240, 1);
+    VideoJobEntity job = service.submitJob("BubbleSort", "BarChart", 5, 30, 320, 240, 1, false);
     assertThat(job.getId()).isNotNull();
 
     Awaitility.await()
@@ -47,8 +47,8 @@ class VideoGenerationTaskletTest {
     FfmpegEncoder mockEncoder = mock(FfmpegEncoder.class);
     when(encoderFactory.create()).thenReturn(mockEncoder);
 
-    VideoJobEntity job1 = service.submitJob("BubbleSort", "BarChart", 5, 30, 320, 240, 1);
-    VideoJobEntity job2 = service.submitJob("QuickSort", "BarChart", 5, 30, 320, 240, 1);
+    VideoJobEntity job1 = service.submitJob("BubbleSort", "BarChart", 5, 30, 320, 240, 1, false);
+    VideoJobEntity job2 = service.submitJob("QuickSort", "BarChart", 5, 30, 320, 240, 1, false);
 
     Awaitility.await()
         .atMost(30, TimeUnit.SECONDS)

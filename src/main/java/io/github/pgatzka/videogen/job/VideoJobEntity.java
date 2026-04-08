@@ -37,6 +37,9 @@ public class VideoJobEntity {
   @Column(name = "frames_per_step", nullable = false)
   private int framesPerStep;
 
+  @Column(nullable = false)
+  private boolean shuffle;
+
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 20)
   private VideoJobStatus status = VideoJobStatus.QUEUED;

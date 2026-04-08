@@ -1,4 +1,4 @@
-package io.github.pgatzka.videogen.config;
+package io.github.pgatzka;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -7,9 +7,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class VideoGenPropertiesTest {
+class ApplicationPropertiesTest {
 
-  @Autowired private VideoGenProperties properties;
+  @Autowired private ApplicationProperties properties;
 
   @Test
   void propertiesAreLoaded() {

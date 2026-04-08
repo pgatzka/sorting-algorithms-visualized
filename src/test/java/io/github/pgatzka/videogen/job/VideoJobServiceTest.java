@@ -29,7 +29,7 @@ class VideoJobServiceTest {
 
   @Test
   void createJobPersistsWithQueuedStatus() {
-    VideoJobEntity job = service.createJob("BubbleSort", "BarChart", 10, 30, 320, 240, 2);
+    VideoJobEntity job = service.createJob("BubbleSort", "BarChart", 10, 30, 320, 240, 2, false);
 
     assertThat(job.getId()).isNotNull();
     assertThat(job.getStatus()).isEqualTo(VideoJobStatus.QUEUED);
@@ -44,7 +44,7 @@ class VideoJobServiceTest {
     FfmpegEncoder mockEncoder = mock(FfmpegEncoder.class);
     when(encoderFactory.create()).thenReturn(mockEncoder);
 
-    VideoJobEntity job = service.createJob("BubbleSort", "BarChart", 5, 30, 320, 240, 1);
+    VideoJobEntity job = service.createJob("BubbleSort", "BarChart", 5, 30, 320, 240, 1, false);
 
     service.executeJob(job.getId());
 
@@ -68,7 +68,7 @@ class VideoJobServiceTest {
         .when(mockEncoder)
         .start(any(), anyInt(), anyInt(), anyInt(), anyString());
 
-    VideoJobEntity job = service.createJob("BubbleSort", "BarChart", 5, 30, 320, 240, 1);
+    VideoJobEntity job = service.createJob("BubbleSort", "BarChart", 5, 30, 320, 240, 1, false);
 
     service.executeJob(job.getId());
 
@@ -82,7 +82,7 @@ class VideoJobServiceTest {
     FfmpegEncoder mockEncoder = mock(FfmpegEncoder.class);
     when(encoderFactory.create()).thenReturn(mockEncoder);
 
-    VideoJobEntity job = service.createJob("UnknownSort", "BarChart", 5, 30, 320, 240, 1);
+    VideoJobEntity job = service.createJob("UnknownSort", "BarChart", 5, 30, 320, 240, 1, false);
 
     service.executeJob(job.getId());
 
@@ -93,8 +93,8 @@ class VideoJobServiceTest {
 
   @Test
   void getAllJobsReturnsCreatedJobs() {
-    service.createJob("BubbleSort", "BarChart", 10, 30, 320, 240, 2);
-    service.createJob("QuickSort", "BarChart", 20, 60, 1080, 1920, 3);
+    service.createJob("BubbleSort", "BarChart", 10, 30, 320, 240, 2, false);
+    service.createJob("QuickSort", "BarChart", 20, 60, 1080, 1920, 3, false);
 
     List<VideoJobEntity> all = service.getAllJobs();
     assertThat(all).hasSize(2);

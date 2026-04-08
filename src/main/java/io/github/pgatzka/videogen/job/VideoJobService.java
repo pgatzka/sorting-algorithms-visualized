@@ -1,9 +1,9 @@
 package io.github.pgatzka.videogen.job;
 
+import io.github.pgatzka.ApplicationProperties;
 import io.github.pgatzka.videogen.algorithm.AlgorithmRegistry;
 import io.github.pgatzka.videogen.algorithm.SortingAlgorithm;
 import io.github.pgatzka.videogen.algorithm.SortingState;
-import io.github.pgatzka.videogen.config.VideoGenProperties;
 import io.github.pgatzka.videogen.encoding.FfmpegEncoder;
 import io.github.pgatzka.videogen.encoding.FfmpegEncoderFactory;
 import io.github.pgatzka.videogen.visualization.Visualization;
@@ -14,15 +14,17 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.parameters.JobParametersBuilder;
-import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.batch.core.launch.JobOperator;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,20 +36,20 @@ public class VideoJobService {
   private final VideoJobRepository repository;
   private final AlgorithmRegistry algorithmRegistry;
   private final VisualizationRegistry visualizationRegistry;
-  private final VideoGenProperties properties;
+  private final ApplicationProperties properties;
   private final FfmpegEncoderFactory encoderFactory;
   private final VideoJobUpdater jobUpdater;
-  private final JobLauncher asyncJobLauncher;
+  private final JobOperator asyncJobLauncher;
   private final Job videoGenerationJob;
 
   public VideoJobService(
       VideoJobRepository repository,
       AlgorithmRegistry algorithmRegistry,
       VisualizationRegistry visualizationRegistry,
-      VideoGenProperties properties,
+      ApplicationProperties properties,
       FfmpegEncoderFactory encoderFactory,
       VideoJobUpdater jobUpdater,
-      @Qualifier("asyncJobLauncher") JobLauncher asyncJobLauncher,
+      @Qualifier("asyncJobLauncher") JobOperator asyncJobLauncher,
       Job videoGenerationJob) {
     this.repository = repository;
     this.algorithmRegistry = algorithmRegistry;
@@ -67,17 +69,19 @@ public class VideoJobService {
       int fps,
       int width,
       int height,
-      int framesPerStep) {
+      int framesPerStep,
+      boolean shuffle) {
     log.info(
         "Creating video job: algorithm={}, visualization={}, elements={}, fps={}, "
-            + "resolution={}x{}, framesPerStep={}",
+            + "resolution={}x{}, framesPerStep={}, shuffle={}",
         algorithm,
         visualization,
         elementCount,
         fps,
         width,
         height,
-        framesPerStep);
+        framesPerStep,
+        shuffle);
 
     VideoJobEntity entity = new VideoJobEntity();
     entity.setAlgorithm(algorithm);
@@ -87,6 +91,7 @@ public class VideoJobService {
     entity.setWidth(width);
     entity.setHeight(height);
     entity.setFramesPerStep(framesPerStep);
+    entity.setShuffle(shuffle);
     entity.setStatus(VideoJobStatus.QUEUED);
     entity.setProgress(0);
 
@@ -102,16 +107,18 @@ public class VideoJobService {
       int fps,
       int width,
       int height,
-      int framesPerStep) {
+      int framesPerStep,
+      boolean shuffle) {
     VideoJobEntity job =
-        createJob(algorithm, visualization, elementCount, fps, width, height, framesPerStep);
+        createJob(
+            algorithm, visualization, elementCount, fps, width, height, framesPerStep, shuffle);
     try {
       var params =
           new JobParametersBuilder()
               .addString("jobId", job.getId().toString())
               .addLong("timestamp", System.currentTimeMillis())
               .toJobParameters();
-      asyncJobLauncher.run(videoGenerationJob, params);
+      asyncJobLauncher.start(videoGenerationJob, params);
       log.info("Batch job launched for video job id={}", job.getId());
     } catch (Exception e) {
       log.error("Failed to launch batch job for video job id={}", job.getId(), e);
@@ -135,24 +142,38 @@ public class VideoJobService {
     try {
       SortingAlgorithm algorithm = algorithmRegistry.getByName(job.getAlgorithm());
       Visualization visualization = visualizationRegistry.getByName(job.getVisualization());
+      int paddingFrames = job.getFps(); // 1 second of padding
 
       log.info(
-          "Job {}: Generating sorting states with {} (elements={})",
+          "Job {}: Generating states with {} (elements={}, shuffle={})",
           jobId,
           algorithm.getName(),
-          job.getElementCount());
+          job.getElementCount(),
+          job.isShuffle());
 
-      int[] inputArray = generateRandomArray(job.getElementCount());
-      List<SortingState> states = algorithm.sort(inputArray);
-      log.info("Job {}: Generated {} sorting states", jobId, states.size());
+      List<SortingState> shuffleStates;
+      List<SortingState> sortStates;
 
-      int totalFrames = states.size() * job.getFramesPerStep();
+      if (job.isShuffle()) {
+        shuffleStates = generateShuffleStates(job.getElementCount());
+        int[] shuffledArray = shuffleStates.getLast().array();
+        sortStates = algorithm.sort(shuffledArray);
+      } else {
+        shuffleStates = List.of();
+        int[] shuffledArray = generateRandomArray(job.getElementCount());
+        sortStates = algorithm.sort(shuffledArray);
+      }
+
+      int animationFrames = (shuffleStates.size() + sortStates.size()) * job.getFramesPerStep();
+      int totalPaddingFrames = job.isShuffle() ? 3 * paddingFrames : 2 * paddingFrames;
+      int totalFrames = animationFrames + totalPaddingFrames;
       log.info(
-          "Job {}: Will render {} total frames ({} states x {} frames/step)",
+          "Job {}: Will render {} total frames ({} shuffle + {} sort states, {} padding)",
           jobId,
           totalFrames,
-          states.size(),
-          job.getFramesPerStep());
+          shuffleStates.size(),
+          sortStates.size(),
+          totalPaddingFrames);
 
       Path outputDir = Path.of(properties.getOutputDir());
       Files.createDirectories(outputDir);
@@ -171,26 +192,62 @@ public class VideoJobService {
             outputPath, job.getWidth(), job.getHeight(), job.getFps(), properties.getFfmpegPath());
 
         int framesWritten = 0;
-        int lastLoggedPercent = 0;
 
-        for (int stateIdx = 0; stateIdx < states.size(); stateIdx++) {
-          SortingState state = states.get(stateIdx);
-          BufferedImage frame = visualization.renderFrame(state, job.getWidth(), job.getHeight());
-
-          for (int f = 0; f < job.getFramesPerStep(); f++) {
-            encoder.writeFrame(frame);
+        if (job.isShuffle()) {
+          // Sorted array visible + 1s wait
+          Set<Integer> allSorted =
+              IntStream.range(0, job.getElementCount())
+                  .boxed()
+                  .collect(java.util.stream.Collectors.toSet());
+          SortingState sortedState =
+              new SortingState(
+                  IntStream.rangeClosed(1, job.getElementCount()).toArray(),
+                  -1,
+                  -1,
+                  false,
+                  allSorted);
+          BufferedImage sortedFrame =
+              visualization.renderFrame(sortedState, job.getWidth(), job.getHeight());
+          for (int f = 0; f < paddingFrames; f++) {
+            encoder.writeFrame(sortedFrame);
             framesWritten++;
           }
 
-          int percent = (int) ((framesWritten * 100L) / totalFrames);
-          if (percent >= lastLoggedPercent + 10) {
-            lastLoggedPercent = (percent / 10) * 10;
-            log.info(
-                "Job {}: Progress {}% ({}/{} frames)",
-                jobId, lastLoggedPercent, framesWritten, totalFrames);
-            jobUpdater.updateProgress(jobId, percent);
+          // Shuffle animation
+          framesWritten =
+              writeStates(encoder, visualization, shuffleStates, job, framesWritten, totalFrames);
+
+          // 1s wait after shuffle
+          BufferedImage lastShuffleFrame =
+              visualization.renderFrame(shuffleStates.getLast(), job.getWidth(), job.getHeight());
+          for (int f = 0; f < paddingFrames; f++) {
+            encoder.writeFrame(lastShuffleFrame);
+            framesWritten++;
+          }
+        } else {
+          // 1s wait before sort
+          BufferedImage firstFrame =
+              visualization.renderFrame(sortStates.getFirst(), job.getWidth(), job.getHeight());
+          for (int f = 0; f < paddingFrames; f++) {
+            encoder.writeFrame(firstFrame);
+            framesWritten++;
           }
         }
+
+        // Sort animation
+        framesWritten =
+            writeStates(encoder, visualization, sortStates, job, framesWritten, totalFrames);
+
+        // 1s wait after sort
+        BufferedImage lastFrame =
+            visualization.renderFrame(sortStates.getLast(), job.getWidth(), job.getHeight());
+        for (int f = 0; f < paddingFrames; f++) {
+          encoder.writeFrame(lastFrame);
+          framesWritten++;
+        }
+
+        jobUpdater.updateProgress(jobId, 100);
+        log.info("Job {}: Progress 100% ({}/{} frames)", jobId, framesWritten, totalFrames);
       }
 
       jobUpdater.markCompleted(jobId, outputPath.toAbsolutePath().toString(), Instant.now());
@@ -202,6 +259,26 @@ public class VideoJobService {
     }
   }
 
+  private int writeStates(
+      FfmpegEncoder encoder,
+      Visualization visualization,
+      List<SortingState> states,
+      VideoJobEntity job,
+      int framesWritten,
+      int totalFrames)
+      throws Exception {
+    for (SortingState state : states) {
+      BufferedImage frame = visualization.renderFrame(state, job.getWidth(), job.getHeight());
+      for (int f = 0; f < job.getFramesPerStep(); f++) {
+        encoder.writeFrame(frame);
+        framesWritten++;
+      }
+    }
+    int percent = (int) ((framesWritten * 100L) / totalFrames);
+    jobUpdater.updateProgress(job.getId(), percent);
+    return framesWritten;
+  }
+
   @Transactional(readOnly = true)
   public Optional<VideoJobEntity> getJob(UUID id) {
     return repository.findById(id);
@@ -210,6 +287,26 @@ public class VideoJobService {
   @Transactional(readOnly = true)
   public List<VideoJobEntity> getAllJobs() {
     return repository.findAllByOrderByCreatedAtDesc();
+  }
+
+  private List<SortingState> generateShuffleStates(int size) {
+    int[] array = IntStream.rangeClosed(1, size).toArray();
+    List<SortingState> states = new ArrayList<>();
+    Random random = new Random();
+
+    for (int i = array.length - 1; i > 0; i--) {
+      int j = random.nextInt(i + 1);
+      if (i != j) {
+        states.add(new SortingState(array, i, j, false, Set.of()));
+        int temp = array[i];
+        array[i] = array[j];
+        array[j] = temp;
+        states.add(new SortingState(array, i, j, true, Set.of()));
+      }
+    }
+
+    states.add(new SortingState(array, -1, -1, false, Set.of()));
+    return states;
   }
 
   private int[] generateRandomArray(int size) {

@@ -2,8 +2,8 @@ package io.github.pgatzka.videogen.ui;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.pgatzka.ApplicationProperties;
 import io.github.pgatzka.videogen.algorithm.AlgorithmRegistry;
-import io.github.pgatzka.videogen.config.VideoGenProperties;
 import io.github.pgatzka.videogen.encoding.FfmpegEncoderFactory;
 import io.github.pgatzka.videogen.job.VideoJobService;
 import io.github.pgatzka.videogen.visualization.VisualizationRegistry;
@@ -18,7 +18,7 @@ class VideoGeneratorViewTest {
   @Autowired private VideoJobService jobService;
   @Autowired private AlgorithmRegistry algorithmRegistry;
   @Autowired private VisualizationRegistry visualizationRegistry;
-  @Autowired private VideoGenProperties properties;
+  @Autowired private ApplicationProperties properties;
   @MockitoBean private FfmpegEncoderFactory encoderFactory;
 
   @Test

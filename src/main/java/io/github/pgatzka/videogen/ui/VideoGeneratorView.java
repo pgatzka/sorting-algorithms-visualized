@@ -4,6 +4,7 @@ import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.H2;
@@ -16,8 +17,8 @@ import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.IntegerField;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.StreamResource;
+import io.github.pgatzka.ApplicationProperties;
 import io.github.pgatzka.videogen.algorithm.AlgorithmRegistry;
-import io.github.pgatzka.videogen.config.VideoGenProperties;
 import io.github.pgatzka.videogen.job.VideoJobEntity;
 import io.github.pgatzka.videogen.job.VideoJobService;
 import io.github.pgatzka.videogen.job.VideoJobStatus;
@@ -40,7 +41,7 @@ public class VideoGeneratorView extends VerticalLayout {
       VideoJobService jobService,
       AlgorithmRegistry algorithmRegistry,
       VisualizationRegistry visualizationRegistry,
-      VideoGenProperties properties) {
+      ApplicationProperties properties) {
     this.jobService = jobService;
 
     setSizeFull();
@@ -77,6 +78,9 @@ public class VideoGeneratorView extends VerticalLayout {
     framesPerStepField.setMax(10);
     framesPerStepField.setStepButtonsVisible(true);
 
+    Checkbox shuffleCheckbox = new Checkbox(getTranslation("form.shuffle"));
+    shuffleCheckbox.setValue(properties.isDefaultShuffle());
+
     Button generateButton = new Button(getTranslation("form.generate"));
     generateButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
     generateButton.addClickListener(
@@ -89,7 +93,8 @@ public class VideoGeneratorView extends VerticalLayout {
               fpsField.getValue(),
               properties.getDefaultWidth(),
               properties.getDefaultHeight(),
-              framesPerStepField.getValue());
+              framesPerStepField.getValue(),
+              shuffleCheckbox.getValue());
           Notification.show(getTranslation("form.job-submitted"));
           refreshGrid();
         });
@@ -101,6 +106,7 @@ public class VideoGeneratorView extends VerticalLayout {
             elementCountField,
             fpsField,
             framesPerStepField,
+            shuffleCheckbox,
             generateButton);
     formLayout.setAlignItems(Alignment.END);
     formLayout.setWidthFull();
