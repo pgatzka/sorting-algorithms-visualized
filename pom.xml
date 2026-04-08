@@ -205,6 +205,7 @@
 					<preparationGoals>clean verify -B -Pproduction</preparationGoals>
 					<completionGoals>clean</completionGoals>
 					<scmCommentPrefix>[release] </scmCommentPrefix>
+					<goals>install</goals>
 				</configuration>
 			</plugin>
 		</plugins>
