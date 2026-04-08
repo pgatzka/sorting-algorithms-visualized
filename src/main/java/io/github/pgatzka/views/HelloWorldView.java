@@ -8,12 +8,11 @@ import com.vaadin.flow.router.Route;
 @Route("")
 public class HelloWorldView extends VerticalLayout {
 
-    public HelloWorldView() {
-        Span greeting = new Span("Hello, World!");
-        Button button = new Button("Click me", event ->
-                greeting.setText("Hello from Vaadin 25 + Spring Boot 4!")
-        );
+  public HelloWorldView() {
+    Span greeting = new Span("Hello, World!");
+    Button button =
+        new Button("Click me", event -> greeting.setText("Hello from Vaadin 25 + Spring Boot 4!"));
 
-        add(greeting, button);
-    }
+    add(greeting, button);
+  }
 }
