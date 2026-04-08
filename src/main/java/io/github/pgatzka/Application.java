@@ -7,9 +7,14 @@ import com.vaadin.flow.theme.lumo.Lumo;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
-@EnableConfigurationProperties(ApplicationProperties.class)
+@EnableScheduling
+@EnableConfigurationProperties({
+  ApplicationProperties.class,
+  io.github.pgatzka.videogen.youtube.YouTubeProperties.class
+})
 @ColorScheme(ColorScheme.Value.DARK)
 @StyleSheet(Lumo.STYLESHEET)
 @StyleSheet(Lumo.COMPACT_STYLESHEET)

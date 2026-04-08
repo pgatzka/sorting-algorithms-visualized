@@ -9,6 +9,8 @@ import io.github.pgatzka.videogen.encoding.FfmpegEncoder;
 import io.github.pgatzka.videogen.encoding.FfmpegEncoderFactory;
 import io.github.pgatzka.videogen.visualization.ColorScheme;
 import io.github.pgatzka.videogen.visualization.FramePostProcessor;
+import io.github.pgatzka.videogen.youtube.CaptionGenerator;
+import io.github.pgatzka.videogen.youtube.YouTubeUploadService;
 import io.github.pgatzka.videogen.visualization.GlowEffect;
 import io.github.pgatzka.videogen.visualization.ParticleTrailEffect;
 import io.github.pgatzka.videogen.visualization.PollIntroRenderer;
@@ -50,6 +52,7 @@ public class VideoJobService {
   private final ApplicationProperties properties;
   private final FfmpegEncoderFactory encoderFactory;
   private final VideoJobUpdater jobUpdater;
+  private final YouTubeUploadService youTubeUploadService;
   private final JobOperator asyncJobLauncher;
   private final Job videoGenerationJob;
 
@@ -60,6 +63,7 @@ public class VideoJobService {
       ApplicationProperties properties,
       FfmpegEncoderFactory encoderFactory,
       VideoJobUpdater jobUpdater,
+      YouTubeUploadService youTubeUploadService,
       @Qualifier("asyncJobLauncher") JobOperator asyncJobLauncher,
       Job videoGenerationJob) {
     this.repository = repository;
@@ -68,6 +72,7 @@ public class VideoJobService {
     this.properties = properties;
     this.encoderFactory = encoderFactory;
     this.jobUpdater = jobUpdater;
+    this.youTubeUploadService = youTubeUploadService;
     this.asyncJobLauncher = asyncJobLauncher;
     this.videoGenerationJob = videoGenerationJob;
   }
@@ -94,6 +99,7 @@ public class VideoJobService {
     entity.setSpeedRun(request.isSpeedRun());
     entity.setSecondAlgorithm(request.getSecondAlgorithm());
     entity.setDebug(request.isDebug());
+    entity.setAutoUpload(request.isAutoUpload());
     entity.setStatus(VideoJobStatus.QUEUED);
     entity.setProgress(0);
 
@@ -421,8 +427,7 @@ public class VideoJobService {
         }
       }
 
-      jobUpdater.markCompleted(jobId, outputPath.toAbsolutePath().toString(), Instant.now());
-      log.info("Job {}: Completed successfully. Output: {}", jobId, outputPath);
+      finalizeJob(job, outputPath);
 
     } catch (Exception e) {
       log.error("Job {}: Failed with error: {}", jobId, e.getMessage(), e);
@@ -793,8 +798,7 @@ public class VideoJobService {
       }
     }
 
-    jobUpdater.markCompleted(jobId, outputPath.toAbsolutePath().toString(), Instant.now());
-    log.info("Job {}: Side-by-side completed. Output: {}", jobId, outputPath);
+    finalizeJob(job, outputPath);
   }
 
   private int writeVsStates(
@@ -1010,6 +1014,53 @@ public class VideoJobService {
       framesWritten++;
     }
     return framesWritten;
+  }
+
+  private void finalizeJob(VideoJobEntity job, Path outputPath)
+      throws IOException, InterruptedException {
+    UUID jobId = job.getId();
+    String outputStr = outputPath.toAbsolutePath().toString();
+
+    if (job.isAutoUpload() && youTubeUploadService.isEnabled()) {
+      try {
+        jobUpdater.updateStatusMessage(jobId, "Uploading to YouTube...");
+        jobUpdater.updateStatus(jobId, VideoJobStatus.UPLOADING);
+
+        CaptionGenerator captions = new CaptionGenerator();
+        String title = captions.generateTitle(job);
+        String description = captions.generateDescription(job);
+
+        String videoId = youTubeUploadService.uploadVideo(outputPath, title, description);
+        jobUpdater.updateYouTubeStatus(jobId, videoId, "PROCESSING");
+        jobUpdater.updateStatusMessage(jobId, "Waiting for YouTube processing...");
+
+        // Poll YouTube until the video is publicly available (max 10 minutes)
+        for (int i = 0; i < 120; i++) {
+          Thread.sleep(5000);
+          try {
+            YouTubeUploadService.VideoMetrics metrics =
+                youTubeUploadService.fetchMetrics(videoId);
+            jobUpdater.updateYouTubeStatus(jobId, videoId, "PUBLIC");
+            jobUpdater.updateStatusMessage(jobId, "Live on YouTube: " + videoId);
+            log.info("Job {}: Video is public on YouTube: {}", jobId, videoId);
+            break;
+          } catch (Exception e) {
+            if (i % 6 == 0) {
+              log.debug("Job {}: Still waiting for YouTube processing...", jobId);
+            }
+          }
+        }
+      } catch (Exception e) {
+        // Upload failed but video was generated successfully — don't fail the job
+        String msg = e.getMessage();
+        log.warn("Job {}: YouTube upload failed (video saved locally): {}", jobId, msg);
+        jobUpdater.updateYouTubeStatus(jobId, null, "FAILED: " + msg);
+        jobUpdater.updateStatusMessage(jobId, "Video ready, upload failed: " + msg);
+      }
+    }
+
+    jobUpdater.markCompleted(jobId, outputStr, Instant.now());
+    log.info("Job {}: Completed. Output: {}", jobId, outputPath);
   }
 
   private String buildFilename(VideoJobEntity job) {

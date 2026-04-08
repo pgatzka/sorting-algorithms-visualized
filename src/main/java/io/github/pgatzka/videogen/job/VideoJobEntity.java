@@ -67,6 +67,9 @@ public class VideoJobEntity {
   @Column(nullable = false)
   private boolean debug;
 
+  @Column(name = "auto_upload", nullable = false)
+  private boolean autoUpload;
+
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 20)
   private VideoJobStatus status = VideoJobStatus.QUEUED;
@@ -79,6 +82,27 @@ public class VideoJobEntity {
 
   @Column(name = "status_message", length = 500)
   private String statusMessage;
+
+  @Column(name = "youtube_video_id", length = 50)
+  private String youtubeVideoId;
+
+  @Column(name = "youtube_status", length = 500)
+  private String youtubeStatus;
+
+  @Column(name = "youtube_views")
+  private Long youtubeViews;
+
+  @Column(name = "youtube_likes")
+  private Long youtubeLikes;
+
+  @Column(name = "youtube_comments")
+  private Long youtubeComments;
+
+  @Column(name = "youtube_title", length = 200)
+  private String youtubeTitle;
+
+  @Column(name = "metrics_updated_at")
+  private Instant metricsUpdatedAt;
 
   @Column(name = "error_message", columnDefinition = "TEXT")
   private String errorMessage;

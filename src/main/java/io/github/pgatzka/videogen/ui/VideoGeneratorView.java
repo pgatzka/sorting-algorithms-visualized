@@ -23,11 +23,18 @@ import io.github.pgatzka.videogen.job.VideoJobEntity;
 import io.github.pgatzka.videogen.job.VideoJobRequest;
 import io.github.pgatzka.videogen.job.VideoJobService;
 import io.github.pgatzka.videogen.job.VideoJobStatus;
+import io.github.pgatzka.videogen.job.VideoJobUpdater;
 import io.github.pgatzka.videogen.visualization.VisualizationRegistry;
+import io.github.pgatzka.videogen.youtube.CaptionGenerator;
+import io.github.pgatzka.videogen.youtube.ScheduledVideoPublisher;
+import io.github.pgatzka.videogen.youtube.YouTubeDeviceAuthService;
+import io.github.pgatzka.videogen.youtube.YouTubeUploadService;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -35,21 +42,83 @@ import lombok.extern.slf4j.Slf4j;
 public class VideoGeneratorView extends VerticalLayout {
 
   private final VideoJobService jobService;
+  private final YouTubeUploadService youTubeUploadService;
+  private final YouTubeDeviceAuthService youTubeDeviceAuthService;
+  private final ScheduledVideoPublisher scheduledVideoPublisher;
+  private final VideoJobUpdater jobUpdater;
   private final Grid<VideoJobEntity> jobGrid;
   private UI ui;
 
   public VideoGeneratorView(
       VideoJobService jobService,
+      YouTubeUploadService youTubeUploadService,
+      YouTubeDeviceAuthService youTubeDeviceAuthService,
+      ScheduledVideoPublisher scheduledVideoPublisher,
+      VideoJobUpdater jobUpdater,
       AlgorithmRegistry algorithmRegistry,
       VisualizationRegistry visualizationRegistry,
       ApplicationProperties properties) {
     this.jobService = jobService;
+    this.youTubeUploadService = youTubeUploadService;
+    this.youTubeDeviceAuthService = youTubeDeviceAuthService;
+    this.scheduledVideoPublisher = scheduledVideoPublisher;
+    this.jobUpdater = jobUpdater;
 
     setSizeFull();
     setPadding(true);
     setSpacing(true);
 
-    add(new H2(getTranslation("view.title")));
+    HorizontalLayout nav = new HorizontalLayout();
+    nav.add(new H2(getTranslation("view.title")));
+    Anchor analyticsLink = new Anchor("analytics", "Analytics Dashboard");
+    analyticsLink.getStyle().set("margin-left", "auto");
+    analyticsLink.getStyle().set("align-self", "center");
+    nav.setWidthFull();
+    nav.setAlignItems(Alignment.CENTER);
+    nav.add(analyticsLink);
+    add(nav);
+
+    // YouTube connection status
+    if (youTubeDeviceAuthService.isConfigured()) {
+      HorizontalLayout ytStatus = new HorizontalLayout();
+      ytStatus.setAlignItems(Alignment.CENTER);
+      ytStatus.setWidthFull();
+      ytStatus.getStyle().set("background", "var(--lumo-contrast-5pct)");
+      ytStatus.getStyle().set("border-radius", "var(--lumo-border-radius-m)");
+      ytStatus.getStyle().set("padding", "var(--lumo-space-s) var(--lumo-space-m)");
+
+      if (youTubeDeviceAuthService.isAuthenticated()) {
+        Span connected = new Span("YouTube: Connected");
+        connected.getElement().setAttribute("theme", "badge success");
+        ytStatus.add(connected);
+      } else if (youTubeDeviceAuthService.isPendingAuth()) {
+        YouTubeDeviceAuthService.DeviceCodeResponse pending = null; // polling in background
+        Span waiting = new Span("YouTube: Waiting for authorization...");
+        waiting.getElement().setAttribute("theme", "badge");
+        ytStatus.add(waiting);
+      } else {
+        Span disconnected = new Span("YouTube: Not connected");
+        disconnected.getElement().setAttribute("theme", "badge error");
+        Button connectBtn = new Button("Connect YouTube");
+        connectBtn.addClickListener(
+            e -> {
+              try {
+                YouTubeDeviceAuthService.DeviceCodeResponse auth =
+                    youTubeDeviceAuthService.startDeviceAuth();
+                Notification.show(
+                    String.format(
+                        "Go to %s and enter code: %s",
+                        auth.getVerificationUrl(), auth.getUserCode()),
+                    0,
+                    Notification.Position.MIDDLE);
+              } catch (Exception ex) {
+                Notification.show("Failed to start auth: " + ex.getMessage());
+              }
+            });
+        ytStatus.add(disconnected, connectBtn);
+      }
+      add(ytStatus);
+    }
 
     // Row 1: Core settings
     Select<String> algorithmSelect = new Select<>();
@@ -172,7 +241,42 @@ public class VideoGeneratorView extends VerticalLayout {
     row2.setAlignItems(Alignment.END);
     row2.setWidthFull();
 
-    add(row1, row2);
+    // Row 3: Batch generation
+    IntegerField batchCountField = new IntegerField(getTranslation("form.batch-count"));
+    batchCountField.setValue(5);
+    batchCountField.setMin(1);
+    batchCountField.setMax(100);
+    batchCountField.setStepButtonsVisible(true);
+
+    Button batchButton = new Button(getTranslation("form.batch-generate"));
+    batchButton.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
+    batchButton.addClickListener(
+        event -> {
+          int count = batchCountField.getValue();
+          boolean upload = youTubeUploadService.isEnabled();
+          log.info("Batch generate: {} videos in parallel, autoUpload={}", count, upload);
+
+          for (int i = 0; i < count; i++) {
+            VideoJobRequest request = scheduledVideoPublisher.buildRandomRequest();
+            if (!upload) {
+              request.setAutoUpload(false);
+            }
+            VideoJobEntity job = jobService.submitJob(request);
+            log.info("Batch job {}/{} submitted: id={}", i + 1, count, job.getId());
+          }
+
+          Notification.show(
+              String.format(
+                  getTranslation("form.batch-started"),
+                  count,
+                  upload ? " + upload" : ""));
+          refreshGrid();
+        });
+
+    HorizontalLayout row3 = new HorizontalLayout(batchCountField, batchButton);
+    row3.setAlignItems(Alignment.END);
+
+    add(row1, row2, row3);
 
     // Jobs grid
     jobGrid = new Grid<>(VideoJobEntity.class, false);
@@ -197,6 +301,7 @@ public class VideoGeneratorView extends VerticalLayout {
                   switch (entity.getStatus()) {
                     case QUEUED -> "badge";
                     case RUNNING -> "badge primary";
+                    case UPLOADING -> "badge contrast";
                     case COMPLETED -> "badge success";
                     case FAILED -> "badge error";
                   };
@@ -229,6 +334,9 @@ public class VideoGeneratorView extends VerticalLayout {
     jobGrid
         .addComponentColumn(
             entity -> {
+              HorizontalLayout actions = new HorizontalLayout();
+              actions.setSpacing(true);
+
               if (entity.getStatus() == VideoJobStatus.COMPLETED
                   && entity.getOutputPath() != null
                   && Files.exists(Path.of(entity.getOutputPath()))) {
@@ -247,7 +355,60 @@ public class VideoGeneratorView extends VerticalLayout {
                 resource.setContentType("video/mp4");
                 Anchor download = new Anchor(resource, getTranslation("grid.action.download"));
                 download.getElement().setAttribute("download", true);
-                return download;
+                actions.add(download);
+
+                // Upload to YouTube button
+                if (youTubeUploadService.isEnabled()
+                    && entity.getYoutubeVideoId() == null) {
+                  Button uploadBtn = new Button(getTranslation("grid.action.upload-youtube"));
+                  uploadBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
+                  uploadBtn.addClickListener(
+                      e -> {
+                        uploadBtn.setEnabled(false);
+                        uploadBtn.setText(getTranslation("grid.action.uploading"));
+                        new Thread(
+                                () -> {
+                                  try {
+                                    CaptionGenerator captions = new CaptionGenerator();
+                                    String title = captions.generateTitle(entity);
+                                    String desc = captions.generateDescription(entity);
+                                    String videoId =
+                                        youTubeUploadService.uploadVideo(
+                                            Path.of(entity.getOutputPath()), title, desc);
+                                    jobUpdater.updateYouTubeStatus(
+                                        entity.getId(), videoId, "UPLOADED");
+                                  } catch (Exception ex) {
+                                    log.error(
+                                        "YouTube upload failed for job {}", entity.getId(), ex);
+                                    jobUpdater.updateYouTubeStatus(
+                                        entity.getId(), null, "FAILED: " + ex.getMessage());
+                                  }
+                                })
+                            .start();
+                        Notification.show(getTranslation("grid.action.upload-started"));
+                      });
+                  actions.add(uploadBtn);
+                } else if (entity.getYoutubeStatus() != null) {
+                  boolean failed = entity.getYoutubeStatus().startsWith("FAILED");
+                  String badgeText = failed ? "Upload Failed" : "Uploaded";
+                  Span ytBadge = new Span(badgeText);
+                  ytBadge
+                      .getElement()
+                      .setAttribute("theme", failed ? "badge error" : "badge success");
+                  if (failed) {
+                    ytBadge.getStyle().set("cursor", "pointer");
+                    ytBadge
+                        .getElement()
+                        .addEventListener(
+                            "click",
+                            e ->
+                                Notification.show(
+                                    entity.getYoutubeStatus(),
+                                    5000,
+                                    Notification.Position.MIDDLE));
+                  }
+                  actions.add(ytBadge);
+                }
               } else if (entity.getStatus() == VideoJobStatus.FAILED) {
                 Button detailsBtn = new Button(getTranslation("grid.action.details"));
                 detailsBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_SMALL);
@@ -259,9 +420,9 @@ public class VideoGeneratorView extends VerticalLayout {
                                 : getTranslation("grid.error.unknown"),
                             5000,
                             Notification.Position.MIDDLE));
-                return detailsBtn;
+                actions.add(detailsBtn);
               }
-              return new Span();
+              return actions;
             })
         .setHeader(getTranslation("grid.column.actions"));
 

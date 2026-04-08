@@ -107,4 +107,18 @@ public class VideoJobUpdater {
               repository.save(job);
             });
   }
+
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void updateYouTubeStatus(UUID jobId, String videoId, String status) {
+    repository
+        .findById(jobId)
+        .ifPresent(
+            job -> {
+              job.setYoutubeVideoId(videoId);
+              job.setYoutubeStatus(status);
+              job.setStatusMessage("YouTube: " + status);
+              repository.save(job);
+              log.info("Job {}: YouTube status updated to {}", jobId, status);
+            });
+  }
 }

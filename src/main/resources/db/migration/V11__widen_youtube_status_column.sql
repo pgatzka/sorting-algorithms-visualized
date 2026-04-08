@@ -1,0 +1,1 @@
+ALTER TABLE video_job ALTER COLUMN youtube_status TYPE VARCHAR(500);

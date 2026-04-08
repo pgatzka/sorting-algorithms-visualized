@@ -2,3 +2,5 @@ target/
 .vscode/
 .claude/settings.local.json
 src/main/frontend/generated/
+youtube-tokens.properties
+.env

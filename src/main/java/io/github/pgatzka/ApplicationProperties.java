@@ -22,4 +22,5 @@ public class ApplicationProperties {
   private boolean defaultParticleTrail = false;
   private boolean defaultTweening = false;
   private boolean defaultSpeedRun = false;
+  private int videoRetentionDays = 7;
 }

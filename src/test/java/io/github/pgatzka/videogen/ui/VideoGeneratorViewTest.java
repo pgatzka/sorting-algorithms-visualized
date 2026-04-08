@@ -6,7 +6,11 @@ import io.github.pgatzka.ApplicationProperties;
 import io.github.pgatzka.videogen.algorithm.AlgorithmRegistry;
 import io.github.pgatzka.videogen.encoding.FfmpegEncoderFactory;
 import io.github.pgatzka.videogen.job.VideoJobService;
+import io.github.pgatzka.videogen.job.VideoJobUpdater;
 import io.github.pgatzka.videogen.visualization.VisualizationRegistry;
+import io.github.pgatzka.videogen.youtube.ScheduledVideoPublisher;
+import io.github.pgatzka.videogen.youtube.YouTubeDeviceAuthService;
+import io.github.pgatzka.videogen.youtube.YouTubeUploadService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,6 +20,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 class VideoGeneratorViewTest {
 
   @Autowired private VideoJobService jobService;
+  @Autowired private YouTubeUploadService youTubeUploadService;
+  @Autowired private YouTubeDeviceAuthService youTubeDeviceAuthService;
+  @Autowired private ScheduledVideoPublisher scheduledVideoPublisher;
+  @Autowired private VideoJobUpdater jobUpdater;
   @Autowired private AlgorithmRegistry algorithmRegistry;
   @Autowired private VisualizationRegistry visualizationRegistry;
   @Autowired private ApplicationProperties properties;
@@ -24,7 +32,15 @@ class VideoGeneratorViewTest {
   @Test
   void viewCanBeConstructed() {
     VideoGeneratorView view =
-        new VideoGeneratorView(jobService, algorithmRegistry, visualizationRegistry, properties);
+        new VideoGeneratorView(
+            jobService,
+            youTubeUploadService,
+            youTubeDeviceAuthService,
+            scheduledVideoPublisher,
+            jobUpdater,
+            algorithmRegistry,
+            visualizationRegistry,
+            properties);
     assertThat(view).isNotNull();
     assertThat(view.getChildren().count()).isGreaterThan(0);
   }
@@ -32,7 +48,15 @@ class VideoGeneratorViewTest {
   @Test
   void viewContainsGrid() {
     VideoGeneratorView view =
-        new VideoGeneratorView(jobService, algorithmRegistry, visualizationRegistry, properties);
+        new VideoGeneratorView(
+            jobService,
+            youTubeUploadService,
+            youTubeDeviceAuthService,
+            scheduledVideoPublisher,
+            jobUpdater,
+            algorithmRegistry,
+            visualizationRegistry,
+            properties);
     boolean hasGrid =
         view.getChildren()
             .anyMatch(component -> component instanceof com.vaadin.flow.component.grid.Grid);

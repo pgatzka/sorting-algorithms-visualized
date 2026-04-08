@@ -27,4 +27,5 @@ public class VideoJobRequest {
   private String secondAlgorithm;
 
   private boolean debug;
+  private boolean autoUpload;
 }
