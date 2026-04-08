@@ -5,7 +5,10 @@
       "Bash(mkdir *)",
       "Bash(jar *)",
       "Bash(grep *)",
-      "Bash(head *)"
+      "Bash(head *)",
+      "mcp__vaadin__search_vaadin_docs",
+      "mcp__vaadin__get_full_document"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true
 }

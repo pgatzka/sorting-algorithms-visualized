@@ -9,19 +9,23 @@ import static org.mockito.Mockito.*;
 import io.github.pgatzka.videogen.encoding.FfmpegEncoder;
 import io.github.pgatzka.videogen.encoding.FfmpegEncoderFactory;
 import java.util.List;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest
-@Transactional
 class VideoJobServiceTest {
 
   @Autowired private VideoJobService service;
   @Autowired private VideoJobRepository repository;
   @MockitoBean private FfmpegEncoderFactory encoderFactory;
+
+  @AfterEach
+  void cleanup() {
+    repository.deleteAll();
+  }
 
   @Test
   void createJobPersistsWithQueuedStatus() {
@@ -89,12 +93,10 @@ class VideoJobServiceTest {
 
   @Test
   void getAllJobsReturnsCreatedJobs() {
-    long countBefore = repository.count();
-
     service.createJob("BubbleSort", "BarChart", 10, 30, 320, 240, 2);
     service.createJob("QuickSort", "BarChart", 20, 60, 1080, 1920, 3);
 
     List<VideoJobEntity> all = service.getAllJobs();
-    assertThat(all).hasSize((int) countBefore + 2);
+    assertThat(all).hasSize(2);
   }
 }

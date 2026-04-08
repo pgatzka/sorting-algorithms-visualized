@@ -36,6 +36,7 @@ public class VideoJobService {
   private final VisualizationRegistry visualizationRegistry;
   private final VideoGenProperties properties;
   private final FfmpegEncoderFactory encoderFactory;
+  private final VideoJobUpdater jobUpdater;
   private final JobLauncher asyncJobLauncher;
   private final Job videoGenerationJob;
 
@@ -45,6 +46,7 @@ public class VideoJobService {
       VisualizationRegistry visualizationRegistry,
       VideoGenProperties properties,
       FfmpegEncoderFactory encoderFactory,
+      VideoJobUpdater jobUpdater,
       @Qualifier("asyncJobLauncher") JobLauncher asyncJobLauncher,
       Job videoGenerationJob) {
     this.repository = repository;
@@ -52,6 +54,7 @@ public class VideoJobService {
     this.visualizationRegistry = visualizationRegistry;
     this.properties = properties;
     this.encoderFactory = encoderFactory;
+    this.jobUpdater = jobUpdater;
     this.asyncJobLauncher = asyncJobLauncher;
     this.videoGenerationJob = videoGenerationJob;
   }
@@ -127,9 +130,7 @@ public class VideoJobService {
             .findById(jobId)
             .orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
 
-    updateStatus(job, VideoJobStatus.RUNNING);
-    job.setStartedAt(Instant.now());
-    repository.save(job);
+    jobUpdater.markRunning(jobId, Instant.now());
 
     try {
       SortingAlgorithm algorithm = algorithmRegistry.getByName(job.getAlgorithm());
@@ -187,24 +188,17 @@ public class VideoJobService {
             log.info(
                 "Job {}: Progress {}% ({}/{} frames)",
                 jobId, lastLoggedPercent, framesWritten, totalFrames);
-            job.setProgress(percent);
-            repository.save(job);
+            jobUpdater.updateProgress(jobId, percent);
           }
         }
       }
 
-      job.setProgress(100);
-      job.setOutputPath(outputPath.toAbsolutePath().toString());
-      job.setCompletedAt(Instant.now());
-      updateStatus(job, VideoJobStatus.COMPLETED);
-
+      jobUpdater.markCompleted(jobId, outputPath.toAbsolutePath().toString(), Instant.now());
       log.info("Job {}: Completed successfully. Output: {}", jobId, outputPath);
 
     } catch (Exception e) {
       log.error("Job {}: Failed with error: {}", jobId, e.getMessage(), e);
-      job.setErrorMessage(e.getMessage());
-      job.setCompletedAt(Instant.now());
-      updateStatus(job, VideoJobStatus.FAILED);
+      jobUpdater.markFailed(jobId, e.getMessage(), Instant.now());
     }
   }
 
@@ -216,12 +210,6 @@ public class VideoJobService {
   @Transactional(readOnly = true)
   public List<VideoJobEntity> getAllJobs() {
     return repository.findAllByOrderByCreatedAtDesc();
-  }
-
-  private void updateStatus(VideoJobEntity job, VideoJobStatus status) {
-    log.info("Job {}: Status change {} -> {}", job.getId(), job.getStatus(), status);
-    job.setStatus(status);
-    repository.save(job);
   }
 
   private int[] generateRandomArray(int size) {

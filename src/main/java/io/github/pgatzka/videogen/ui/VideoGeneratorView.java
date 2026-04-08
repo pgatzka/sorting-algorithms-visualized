@@ -47,38 +47,37 @@ public class VideoGeneratorView extends VerticalLayout {
     setPadding(true);
     setSpacing(true);
 
-    add(new H2("Sorting Algorithm Video Generator"));
+    add(new H2(getTranslation("view.title")));
 
-    // Configuration form
     Select<String> algorithmSelect = new Select<>();
-    algorithmSelect.setLabel("Algorithm");
+    algorithmSelect.setLabel(getTranslation("form.algorithm"));
     algorithmSelect.setItems(algorithmRegistry.getAllNames());
     algorithmSelect.setValue(algorithmRegistry.getAllNames().getFirst());
 
     Select<String> visualizationSelect = new Select<>();
-    visualizationSelect.setLabel("Visualization");
+    visualizationSelect.setLabel(getTranslation("form.visualization"));
     visualizationSelect.setItems(visualizationRegistry.getAllNames());
     visualizationSelect.setValue(visualizationRegistry.getAllNames().getFirst());
 
-    IntegerField elementCountField = new IntegerField("Elements");
+    IntegerField elementCountField = new IntegerField(getTranslation("form.elements"));
     elementCountField.setValue(properties.getDefaultElementCount());
     elementCountField.setMin(2);
     elementCountField.setMax(200);
     elementCountField.setStepButtonsVisible(true);
 
-    IntegerField fpsField = new IntegerField("FPS");
+    IntegerField fpsField = new IntegerField(getTranslation("form.fps"));
     fpsField.setValue(properties.getDefaultFps());
     fpsField.setMin(24);
     fpsField.setMax(120);
     fpsField.setStepButtonsVisible(true);
 
-    IntegerField framesPerStepField = new IntegerField("Frames/Step");
+    IntegerField framesPerStepField = new IntegerField(getTranslation("form.frames-per-step"));
     framesPerStepField.setValue(properties.getDefaultFramesPerStep());
     framesPerStepField.setMin(1);
     framesPerStepField.setMax(10);
     framesPerStepField.setStepButtonsVisible(true);
 
-    Button generateButton = new Button("Generate Video");
+    Button generateButton = new Button(getTranslation("form.generate"));
     generateButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
     generateButton.addClickListener(
         event -> {
@@ -91,7 +90,7 @@ public class VideoGeneratorView extends VerticalLayout {
               properties.getDefaultWidth(),
               properties.getDefaultHeight(),
               framesPerStepField.getValue());
-          Notification.show("Video generation job submitted!");
+          Notification.show(getTranslation("form.job-submitted"));
           refreshGrid();
         });
 
@@ -107,12 +106,19 @@ public class VideoGeneratorView extends VerticalLayout {
     formLayout.setWidthFull();
     add(formLayout);
 
-    // Jobs grid
     jobGrid = new Grid<>(VideoJobEntity.class, false);
-    jobGrid.addColumn(entity -> entity.getId().toString().substring(0, 8)).setHeader("ID");
-    jobGrid.addColumn(VideoJobEntity::getAlgorithm).setHeader("Algorithm");
-    jobGrid.addColumn(VideoJobEntity::getVisualization).setHeader("Visualization");
-    jobGrid.addColumn(VideoJobEntity::getElementCount).setHeader("Elements");
+    jobGrid
+        .addColumn(entity -> entity.getId().toString().substring(0, 8))
+        .setHeader(getTranslation("grid.column.id"));
+    jobGrid
+        .addColumn(VideoJobEntity::getAlgorithm)
+        .setHeader(getTranslation("grid.column.algorithm"));
+    jobGrid
+        .addColumn(VideoJobEntity::getVisualization)
+        .setHeader(getTranslation("grid.column.visualization"));
+    jobGrid
+        .addColumn(VideoJobEntity::getElementCount)
+        .setHeader(getTranslation("grid.column.elements"));
 
     jobGrid
         .addComponentColumn(
@@ -128,7 +134,7 @@ public class VideoGeneratorView extends VerticalLayout {
               statusBadge.getElement().setAttribute("theme", theme);
               return statusBadge;
             })
-        .setHeader("Status");
+        .setHeader(getTranslation("grid.column.status"));
 
     jobGrid
         .addComponentColumn(
@@ -139,7 +145,7 @@ public class VideoGeneratorView extends VerticalLayout {
               progressBar.setValue(entity.getProgress());
               return progressBar;
             })
-        .setHeader("Progress");
+        .setHeader(getTranslation("grid.column.progress"));
 
     jobGrid
         .addComponentColumn(
@@ -160,25 +166,25 @@ public class VideoGeneratorView extends VerticalLayout {
                           }
                         });
                 resource.setContentType("video/mp4");
-                Anchor download = new Anchor(resource, "Download");
+                Anchor download = new Anchor(resource, getTranslation("grid.action.download"));
                 download.getElement().setAttribute("download", true);
                 return download;
               } else if (entity.getStatus() == VideoJobStatus.FAILED) {
-                Button detailsBtn = new Button("Details");
+                Button detailsBtn = new Button(getTranslation("grid.action.details"));
                 detailsBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_SMALL);
                 detailsBtn.addClickListener(
                     e ->
                         Notification.show(
                             entity.getErrorMessage() != null
                                 ? entity.getErrorMessage()
-                                : "Unknown error",
+                                : getTranslation("grid.error.unknown"),
                             5000,
                             Notification.Position.MIDDLE));
                 return detailsBtn;
               }
               return new Span();
             })
-        .setHeader("Actions");
+        .setHeader(getTranslation("grid.column.actions"));
 
     jobGrid.setSizeFull();
     add(jobGrid);
