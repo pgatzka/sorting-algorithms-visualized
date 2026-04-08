@@ -1,0 +1,111 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump type"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Calculate versions
+        id: versions
+        run: |
+          CURRENT=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
+          # Strip -SNAPSHOT
+          BASE=${CURRENT%-SNAPSHOT}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
+
+          case "${{ inputs.bump }}" in
+            major)
+              RELEASE="$((MAJOR + 1)).0.0"
+              NEXT="$((MAJOR + 1)).0.1-SNAPSHOT"
+              ;;
+            minor)
+              RELEASE="${MAJOR}.$((MINOR + 1)).0"
+              NEXT="${MAJOR}.$((MINOR + 1)).1-SNAPSHOT"
+              ;;
+            patch)
+              RELEASE="${MAJOR}.${MINOR}.$((PATCH + 1))"
+              NEXT="${MAJOR}.${MINOR}.$((PATCH + 2))-SNAPSHOT"
+              ;;
+          esac
+
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Releasing: $CURRENT -> $RELEASE -> $NEXT"
+
+      - name: Maven Release Prepare
+        run: |
+          ./mvnw release:prepare -B \
+            -DreleaseVersion=${{ steps.versions.outputs.release }} \
+            -DdevelopmentVersion=${{ steps.versions.outputs.next }} \
+            -Darguments="-DskipTests"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Maven Release Perform
+        run: |
+          ./mvnw release:perform -B \
+            -Darguments="-DskipTests -Pproduction"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.release }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.versions.outputs.release }}
+          name: v${{ steps.versions.outputs.release }}
+          generate_release_notes: true

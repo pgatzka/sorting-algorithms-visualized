@@ -16,6 +16,13 @@
 	<name>sorting-algorithms-visualized</name>
 	<description>Sorting Algorithms Visualized with Vaadin</description>
 
+	<scm>
+		<connection>scm:git:https://github.com/pgatzka/sorting-algorithms-visualized.git</connection>
+		<developerConnection>scm:git:https://github.com/pgatzka/sorting-algorithms-visualized.git</developerConnection>
+		<url>https://github.com/pgatzka/sorting-algorithms-visualized</url>
+		<tag>HEAD</tag>
+	</scm>
+
 	<properties>
 		<java.version>21</java.version>
 		<vaadin.version>25.1.1</vaadin.version>
@@ -189,6 +196,17 @@
 						</goals>
 					</execution>
 				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-release-plugin</artifactId>
+				<configuration>
+					<tagNameFormat>v@{project.version}</tagNameFormat>
+					<autoVersionSubmodules>true</autoVersionSubmodules>
+					<preparationGoals>clean verify -B -Pproduction</preparationGoals>
+					<completionGoals>clean</completionGoals>
+					<scmCommentPrefix>[release] </scmCommentPrefix>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>
