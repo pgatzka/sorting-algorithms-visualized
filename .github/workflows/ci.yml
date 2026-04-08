@@ -34,6 +34,8 @@ jobs:
           distribution: temurin
           java-version: 21
           cache: maven
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: ./mvnw verify -B
 
   sonar:
@@ -49,6 +51,8 @@ jobs:
           distribution: temurin
           java-version: 21
           cache: maven
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: ./mvnw verify sonar:sonar -B
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

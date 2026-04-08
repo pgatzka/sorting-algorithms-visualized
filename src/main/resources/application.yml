@@ -8,3 +8,17 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+  batch:
+    jdbc:
+      initialize-schema: always
+    job:
+      enabled: false
+
+videogen:
+  output-dir: ./videos
+  ffmpeg-path: ffmpeg
+  default-width: 1080
+  default-height: 1920
+  default-fps: 60
+  default-element-count: 50
+  default-frames-per-step: 3
