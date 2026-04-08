@@ -96,6 +96,12 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.versions.outputs.release }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
+      - name: Update production branch
+        run: |
+          git fetch origin
+          git checkout -B production v${{ steps.versions.outputs.release }}
+          git push origin production --force
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
