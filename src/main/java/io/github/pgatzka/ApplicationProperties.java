@@ -15,4 +15,11 @@ public class ApplicationProperties {
   private int defaultElementCount = 50;
   private int defaultFramesPerStep = 3;
   private boolean defaultShuffle = true;
+  private String defaultColorScheme = "DEFAULT";
+  private boolean defaultSound = true;
+  private boolean defaultShowStats = true;
+  private boolean defaultGlowEffect = true;
+  private boolean defaultParticleTrail = false;
+  private boolean defaultTweening = false;
+  private boolean defaultSpeedRun = false;
 }

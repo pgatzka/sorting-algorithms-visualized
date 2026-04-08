@@ -19,7 +19,7 @@ class BarChartVisualizationTest {
   @Test
   void rendersCorrectDimensions() {
     SortingState state = new SortingState(new int[] {3, 1, 2}, -1, -1, false, Set.of());
-    BufferedImage image = visualization.renderFrame(state, 1080, 1920);
+    BufferedImage image = visualization.renderFrame(state, 1080, 1920, ColorScheme.DEFAULT);
     assertThat(image.getWidth()).isEqualTo(1080);
     assertThat(image.getHeight()).isEqualTo(1920);
   }
@@ -27,14 +27,14 @@ class BarChartVisualizationTest {
   @Test
   void imageTypeIs3ByteBgr() {
     SortingState state = new SortingState(new int[] {3, 1, 2}, -1, -1, false, Set.of());
-    BufferedImage image = visualization.renderFrame(state, 1080, 1920);
+    BufferedImage image = visualization.renderFrame(state, 1080, 1920, ColorScheme.DEFAULT);
     assertThat(image.getType()).isEqualTo(BufferedImage.TYPE_3BYTE_BGR);
   }
 
   @Test
   void imageIsNotBlank() {
     SortingState state = new SortingState(new int[] {5, 3, 8, 1, 2}, -1, -1, false, Set.of());
-    BufferedImage image = visualization.renderFrame(state, 1080, 1920);
+    BufferedImage image = visualization.renderFrame(state, 1080, 1920, ColorScheme.DEFAULT);
 
     // Check that at least some pixels differ from the background color (0x1a1a2e)
     int bgRgb = 0xFF1a1a2e;
@@ -53,8 +53,8 @@ class BarChartVisualizationTest {
   void differentStatesProduceDifferentImages() {
     SortingState state1 = new SortingState(new int[] {5, 3, 8, 1, 2}, -1, -1, false, Set.of());
     SortingState state2 = new SortingState(new int[] {1, 2, 3, 5, 8}, -1, -1, false, Set.of());
-    BufferedImage image1 = visualization.renderFrame(state1, 1080, 1920);
-    BufferedImage image2 = visualization.renderFrame(state2, 1080, 1920);
+    BufferedImage image1 = visualization.renderFrame(state1, 1080, 1920, ColorScheme.DEFAULT);
+    BufferedImage image2 = visualization.renderFrame(state2, 1080, 1920, ColorScheme.DEFAULT);
 
     boolean differ = false;
     outer:
@@ -73,8 +73,10 @@ class BarChartVisualizationTest {
   void highlightedBarsHaveDifferentColor() {
     SortingState noHighlight = new SortingState(new int[] {5, 3, 8, 1, 2}, -1, -1, false, Set.of());
     SortingState withHighlight = new SortingState(new int[] {5, 3, 8, 1, 2}, 0, 1, false, Set.of());
-    BufferedImage imageNoHL = visualization.renderFrame(noHighlight, 1080, 1920);
-    BufferedImage imageHL = visualization.renderFrame(withHighlight, 1080, 1920);
+    BufferedImage imageNoHL =
+        visualization.renderFrame(noHighlight, 1080, 1920, ColorScheme.DEFAULT);
+    BufferedImage imageHL =
+        visualization.renderFrame(withHighlight, 1080, 1920, ColorScheme.DEFAULT);
 
     boolean differ = false;
     outer:
@@ -92,7 +94,7 @@ class BarChartVisualizationTest {
   @Test
   void emptyArrayRendersWithoutError() {
     SortingState state = new SortingState(new int[] {}, -1, -1, false, Set.of());
-    BufferedImage image = visualization.renderFrame(state, 1080, 1920);
+    BufferedImage image = visualization.renderFrame(state, 1080, 1920, ColorScheme.DEFAULT);
     assertThat(image).isNotNull();
   }
 }

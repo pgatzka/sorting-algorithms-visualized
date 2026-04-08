@@ -8,18 +8,14 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-public class BarChartVisualization implements Visualization {
+public class DisparityVisualization implements Visualization {
 
   private static final Color BACKGROUND = new Color(0x1a, 0x1a, 0x2e);
-
-  private static final int PADDING_TOP = 80;
-  private static final int PADDING_BOTTOM = 80;
-  private static final int PADDING_SIDE = 40;
-  private static final float GAP_RATIO = 0.2f;
+  private static final int PADDING = 80;
 
   @Override
   public String getName() {
-    return "BarChart";
+    return "Disparity";
   }
 
   @Override
@@ -27,7 +23,6 @@ public class BarChartVisualization implements Visualization {
       SortingState state, int width, int height, ColorScheme colorScheme) {
     BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_3BYTE_BGR);
     Graphics2D g = image.createGraphics();
-
     g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
     g.setColor(BACKGROUND);
@@ -40,43 +35,37 @@ public class BarChartVisualization implements Visualization {
       return image;
     }
 
-    int drawableWidth = width - 2 * PADDING_SIDE;
-    int drawableHeight = height - PADDING_TOP - PADDING_BOTTOM;
-
-    float totalBarWidth = (float) drawableWidth / n;
-    float gap = totalBarWidth * GAP_RATIO;
-    float barWidth = totalBarWidth - gap;
+    int drawW = width - 2 * PADDING;
+    int drawH = height - 2 * PADDING;
+    int topY = PADDING;
+    int bottomY = PADDING + drawH;
 
     int maxVal = 1;
     for (int val : array) {
-      if (val > maxVal) {
-        maxVal = val;
-      }
+      if (val > maxVal) maxVal = val;
     }
 
-    for (int i = 0; i < n; i++) {
-      float barHeight = ((float) array[i] / maxVal) * drawableHeight;
-      float x = PADDING_SIDE + i * totalBarWidth + gap / 2;
-      float y = height - PADDING_BOTTOM - barHeight;
+    float lineWidth = Math.max(1.0f, (float) drawW / n * 0.6f);
+    g.setStroke(new BasicStroke(lineWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
 
-      g.setColor(getBarColor(state, i, maxVal, colorScheme));
-      g.fillRoundRect(
-          Math.round(x),
-          Math.round(y),
-          Math.max(1, Math.round(barWidth)),
-          Math.round(barHeight),
-          4,
-          4);
+    for (int i = 0; i < n; i++) {
+      // Current position (top row)
+      float currentX = PADDING + ((float) i / (n - 1)) * drawW;
+      // Target position (bottom row) — value determines where it should be
+      float targetX = PADDING + ((float) (array[i] - 1) / (maxVal - 1)) * drawW;
+
+      g.setColor(getLineColor(state, i, maxVal, colorScheme));
+      g.drawLine(Math.round(currentX), topY, Math.round(targetX), bottomY);
     }
 
     g.dispose();
     return image;
   }
 
-  private Color getBarColor(SortingState state, int index, int maxValue, ColorScheme colorScheme) {
+  private Color getLineColor(SortingState state, int index, int maxVal, ColorScheme colorScheme) {
     int value = state.array()[index];
     if (state.sorted().contains(index)) {
-      return colorScheme.getSortedColor(value, maxValue);
+      return colorScheme.getSortedColor(value, maxVal);
     }
     if (state.swapped() && (index == state.compareIdx1() || index == state.compareIdx2())) {
       return colorScheme.getSwappedColor();
@@ -84,6 +73,6 @@ public class BarChartVisualization implements Visualization {
     if (index == state.compareIdx1() || index == state.compareIdx2()) {
       return colorScheme.getCompareColor();
     }
-    return colorScheme.getBarColor(value, maxValue);
+    return colorScheme.getBarColor(value, maxVal);
   }
 }

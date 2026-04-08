@@ -32,7 +32,25 @@ class AlgorithmRegistryTest {
   }
 
   @Test
-  void getAllNamesReturnsBothAlgorithms() {
-    assertThat(registry.getAllNames()).containsExactlyInAnyOrder("BubbleSort", "QuickSort");
+  void getAllNamesReturnsAllAlgorithms() {
+    assertThat(registry.getAllNames())
+        .contains(
+            "BubbleSort",
+            "QuickSort",
+            "InsertionSort",
+            "SelectionSort",
+            "MergeSort",
+            "HeapSort",
+            "ShellSort",
+            "CocktailShakerSort",
+            "CombSort",
+            "GnomeSort",
+            "BogoSort",
+            "StalinSort",
+            "PancakeSort",
+            "StoogeSort",
+            "SlowSort",
+            "BitonicSort",
+            "GravitySort");
   }
 }

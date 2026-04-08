@@ -20,12 +20,25 @@ class VideoGenerationTaskletTest {
   @Autowired private VideoJobRepository repository;
   @MockitoBean private FfmpegEncoderFactory encoderFactory;
 
+  private static VideoJobRequest defaultRequest(String algorithm) {
+    return VideoJobRequest.builder()
+        .algorithm(algorithm)
+        .visualization("BarChart")
+        .elementCount(5)
+        .fps(30)
+        .width(320)
+        .height(240)
+        .framesPerStep(1)
+        .colorScheme("DEFAULT")
+        .build();
+  }
+
   @Test
   void submitJobLaunchesBatchAndCompletes() throws Exception {
     FfmpegEncoder mockEncoder = mock(FfmpegEncoder.class);
     when(encoderFactory.create()).thenReturn(mockEncoder);
 
-    VideoJobEntity job = service.submitJob("BubbleSort", "BarChart", 5, 30, 320, 240, 1, false);
+    VideoJobEntity job = service.submitJob(defaultRequest("BubbleSort"));
     assertThat(job.getId()).isNotNull();
 
     Awaitility.await()
@@ -47,8 +60,8 @@ class VideoGenerationTaskletTest {
     FfmpegEncoder mockEncoder = mock(FfmpegEncoder.class);
     when(encoderFactory.create()).thenReturn(mockEncoder);
 
-    VideoJobEntity job1 = service.submitJob("BubbleSort", "BarChart", 5, 30, 320, 240, 1, false);
-    VideoJobEntity job2 = service.submitJob("QuickSort", "BarChart", 5, 30, 320, 240, 1, false);
+    VideoJobEntity job1 = service.submitJob(defaultRequest("BubbleSort"));
+    VideoJobEntity job2 = service.submitJob(defaultRequest("QuickSort"));
 
     Awaitility.await()
         .atMost(30, TimeUnit.SECONDS)

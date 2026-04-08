@@ -40,6 +40,33 @@ public class VideoJobEntity {
   @Column(nullable = false)
   private boolean shuffle;
 
+  @Column(name = "color_scheme", nullable = false, length = 20)
+  private String colorScheme = "DEFAULT";
+
+  @Column(nullable = false)
+  private boolean sound;
+
+  @Column(name = "show_stats", nullable = false)
+  private boolean showStats;
+
+  @Column(name = "glow_effect", nullable = false)
+  private boolean glowEffect;
+
+  @Column(name = "particle_trail", nullable = false)
+  private boolean particleTrail;
+
+  @Column(nullable = false)
+  private boolean tweening;
+
+  @Column(name = "speed_run", nullable = false)
+  private boolean speedRun;
+
+  @Column(name = "second_algorithm", length = 50)
+  private String secondAlgorithm;
+
+  @Column(nullable = false)
+  private boolean debug;
+
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 20)
   private VideoJobStatus status = VideoJobStatus.QUEUED;

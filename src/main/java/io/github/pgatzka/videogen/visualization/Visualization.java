@@ -7,5 +7,5 @@ public interface Visualization {
 
   String getName();
 
-  BufferedImage renderFrame(SortingState state, int width, int height);
+  BufferedImage renderFrame(SortingState state, int width, int height, ColorScheme colorScheme);
 }

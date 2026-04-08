@@ -27,9 +27,34 @@ class VideoJobServiceTest {
     repository.deleteAll();
   }
 
+  private static VideoJobRequest defaultRequest() {
+    return VideoJobRequest.builder()
+        .algorithm("BubbleSort")
+        .visualization("BarChart")
+        .elementCount(5)
+        .fps(30)
+        .width(320)
+        .height(240)
+        .framesPerStep(1)
+        .colorScheme("DEFAULT")
+        .build();
+  }
+
   @Test
   void createJobPersistsWithQueuedStatus() {
-    VideoJobEntity job = service.createJob("BubbleSort", "BarChart", 10, 30, 320, 240, 2, false);
+    VideoJobRequest request =
+        VideoJobRequest.builder()
+            .algorithm("BubbleSort")
+            .visualization("BarChart")
+            .elementCount(10)
+            .fps(30)
+            .width(320)
+            .height(240)
+            .framesPerStep(2)
+            .colorScheme("DEFAULT")
+            .build();
+
+    VideoJobEntity job = service.createJob(request);
 
     assertThat(job.getId()).isNotNull();
     assertThat(job.getStatus()).isEqualTo(VideoJobStatus.QUEUED);
@@ -44,7 +69,7 @@ class VideoJobServiceTest {
     FfmpegEncoder mockEncoder = mock(FfmpegEncoder.class);
     when(encoderFactory.create()).thenReturn(mockEncoder);
 
-    VideoJobEntity job = service.createJob("BubbleSort", "BarChart", 5, 30, 320, 240, 1, false);
+    VideoJobEntity job = service.createJob(defaultRequest());
 
     service.executeJob(job.getId());
 
@@ -68,7 +93,7 @@ class VideoJobServiceTest {
         .when(mockEncoder)
         .start(any(), anyInt(), anyInt(), anyInt(), anyString());
 
-    VideoJobEntity job = service.createJob("BubbleSort", "BarChart", 5, 30, 320, 240, 1, false);
+    VideoJobEntity job = service.createJob(defaultRequest());
 
     service.executeJob(job.getId());
 
@@ -82,7 +107,19 @@ class VideoJobServiceTest {
     FfmpegEncoder mockEncoder = mock(FfmpegEncoder.class);
     when(encoderFactory.create()).thenReturn(mockEncoder);
 
-    VideoJobEntity job = service.createJob("UnknownSort", "BarChart", 5, 30, 320, 240, 1, false);
+    VideoJobRequest request =
+        VideoJobRequest.builder()
+            .algorithm("UnknownSort")
+            .visualization("BarChart")
+            .elementCount(5)
+            .fps(30)
+            .width(320)
+            .height(240)
+            .framesPerStep(1)
+            .colorScheme("DEFAULT")
+            .build();
+
+    VideoJobEntity job = service.createJob(request);
 
     service.executeJob(job.getId());
 
@@ -93,8 +130,18 @@ class VideoJobServiceTest {
 
   @Test
   void getAllJobsReturnsCreatedJobs() {
-    service.createJob("BubbleSort", "BarChart", 10, 30, 320, 240, 2, false);
-    service.createJob("QuickSort", "BarChart", 20, 60, 1080, 1920, 3, false);
+    service.createJob(defaultRequest());
+    service.createJob(
+        VideoJobRequest.builder()
+            .algorithm("QuickSort")
+            .visualization("BarChart")
+            .elementCount(20)
+            .fps(60)
+            .width(1080)
+            .height(1920)
+            .framesPerStep(3)
+            .colorScheme("DEFAULT")
+            .build());
 
     List<VideoJobEntity> all = service.getAllJobs();
     assertThat(all).hasSize(2);

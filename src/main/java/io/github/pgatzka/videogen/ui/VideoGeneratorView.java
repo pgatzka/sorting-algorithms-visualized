@@ -20,6 +20,7 @@ import com.vaadin.flow.server.StreamResource;
 import io.github.pgatzka.ApplicationProperties;
 import io.github.pgatzka.videogen.algorithm.AlgorithmRegistry;
 import io.github.pgatzka.videogen.job.VideoJobEntity;
+import io.github.pgatzka.videogen.job.VideoJobRequest;
 import io.github.pgatzka.videogen.job.VideoJobService;
 import io.github.pgatzka.videogen.job.VideoJobStatus;
 import io.github.pgatzka.videogen.visualization.VisualizationRegistry;
@@ -50,10 +51,17 @@ public class VideoGeneratorView extends VerticalLayout {
 
     add(new H2(getTranslation("view.title")));
 
+    // Row 1: Core settings
     Select<String> algorithmSelect = new Select<>();
     algorithmSelect.setLabel(getTranslation("form.algorithm"));
     algorithmSelect.setItems(algorithmRegistry.getAllNames());
     algorithmSelect.setValue(algorithmRegistry.getAllNames().getFirst());
+
+    Select<String> secondAlgorithmSelect = new Select<>();
+    secondAlgorithmSelect.setLabel(getTranslation("form.second-algorithm"));
+    secondAlgorithmSelect.setItems(algorithmRegistry.getAllNames());
+    secondAlgorithmSelect.setEmptySelectionAllowed(true);
+    secondAlgorithmSelect.setEmptySelectionCaption(getTranslation("form.none"));
 
     Select<String> visualizationSelect = new Select<>();
     visualizationSelect.setLabel(getTranslation("form.visualization"));
@@ -78,40 +86,95 @@ public class VideoGeneratorView extends VerticalLayout {
     framesPerStepField.setMax(10);
     framesPerStepField.setStepButtonsVisible(true);
 
+    Select<String> colorSchemeSelect = new Select<>();
+    colorSchemeSelect.setLabel(getTranslation("form.color-scheme"));
+    colorSchemeSelect.setItems("DEFAULT", "RAINBOW", "GREYSCALE");
+    colorSchemeSelect.setValue(properties.getDefaultColorScheme());
+
+    HorizontalLayout row1 =
+        new HorizontalLayout(
+            algorithmSelect,
+            secondAlgorithmSelect,
+            visualizationSelect,
+            elementCountField,
+            fpsField,
+            framesPerStepField,
+            colorSchemeSelect);
+    row1.setAlignItems(Alignment.END);
+    row1.setWidthFull();
+
+    // Row 2: Toggles
     Checkbox shuffleCheckbox = new Checkbox(getTranslation("form.shuffle"));
     shuffleCheckbox.setValue(properties.isDefaultShuffle());
+
+    Checkbox soundCheckbox = new Checkbox(getTranslation("form.sound"));
+    soundCheckbox.setValue(properties.isDefaultSound());
+
+    Checkbox statsCheckbox = new Checkbox(getTranslation("form.show-stats"));
+    statsCheckbox.setValue(properties.isDefaultShowStats());
+
+    Checkbox glowCheckbox = new Checkbox(getTranslation("form.glow-effect"));
+    glowCheckbox.setValue(properties.isDefaultGlowEffect());
+
+    Checkbox particleCheckbox = new Checkbox(getTranslation("form.particle-trail"));
+    particleCheckbox.setValue(properties.isDefaultParticleTrail());
+
+    Checkbox tweeningCheckbox = new Checkbox(getTranslation("form.tweening"));
+    tweeningCheckbox.setValue(properties.isDefaultTweening());
+
+    Checkbox speedRunCheckbox = new Checkbox(getTranslation("form.speed-run"));
+    speedRunCheckbox.setValue(properties.isDefaultSpeedRun());
+
+    Checkbox debugCheckbox = new Checkbox(getTranslation("form.debug"));
+    debugCheckbox.setValue(false);
 
     Button generateButton = new Button(getTranslation("form.generate"));
     generateButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
     generateButton.addClickListener(
         event -> {
           log.info("Generate button clicked");
-          jobService.submitJob(
-              algorithmSelect.getValue(),
-              visualizationSelect.getValue(),
-              elementCountField.getValue(),
-              fpsField.getValue(),
-              properties.getDefaultWidth(),
-              properties.getDefaultHeight(),
-              framesPerStepField.getValue(),
-              shuffleCheckbox.getValue());
+          VideoJobRequest request =
+              VideoJobRequest.builder()
+                  .algorithm(algorithmSelect.getValue())
+                  .visualization(visualizationSelect.getValue())
+                  .elementCount(elementCountField.getValue())
+                  .fps(fpsField.getValue())
+                  .width(properties.getDefaultWidth())
+                  .height(properties.getDefaultHeight())
+                  .framesPerStep(framesPerStepField.getValue())
+                  .shuffle(shuffleCheckbox.getValue())
+                  .colorScheme(colorSchemeSelect.getValue())
+                  .sound(soundCheckbox.getValue())
+                  .showStats(statsCheckbox.getValue())
+                  .glowEffect(glowCheckbox.getValue())
+                  .particleTrail(particleCheckbox.getValue())
+                  .tweening(tweeningCheckbox.getValue())
+                  .speedRun(speedRunCheckbox.getValue())
+                  .secondAlgorithm(secondAlgorithmSelect.getValue())
+                  .debug(debugCheckbox.getValue())
+                  .build();
+          jobService.submitJob(request);
           Notification.show(getTranslation("form.job-submitted"));
           refreshGrid();
         });
 
-    HorizontalLayout formLayout =
+    HorizontalLayout row2 =
         new HorizontalLayout(
-            algorithmSelect,
-            visualizationSelect,
-            elementCountField,
-            fpsField,
-            framesPerStepField,
             shuffleCheckbox,
+            soundCheckbox,
+            statsCheckbox,
+            glowCheckbox,
+            particleCheckbox,
+            tweeningCheckbox,
+            speedRunCheckbox,
+            debugCheckbox,
             generateButton);
-    formLayout.setAlignItems(Alignment.END);
-    formLayout.setWidthFull();
-    add(formLayout);
+    row2.setAlignItems(Alignment.END);
+    row2.setWidthFull();
 
+    add(row1, row2);
+
+    // Jobs grid
     jobGrid = new Grid<>(VideoJobEntity.class, false);
     jobGrid
         .addColumn(entity -> entity.getId().toString().substring(0, 8))
